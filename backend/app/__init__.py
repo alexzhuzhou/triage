@@ -1,0 +1,3 @@
+"""
+Triage application package.
+"""
