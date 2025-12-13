@@ -1,0 +1,9 @@
+{
+  "id": "email-002",
+  "subject": "Re: NF-39281 - Scheduling Update",
+  "sender": "referrals@lawfirmabc.com",
+  "recipients": ["intake@imecompany.com"],
+  "body": "Hi,\n\nJust following up on case NF-39281 (Johnathan Doe). The patient needs to reschedule the exam.\n\nNew Date: March 22, 2025\nNew Time: 10:00 AM\nSame location (Los Angeles)\n\nCan you please confirm the new time works?\n\nThanks,\nSarah",
+  "attachments": [],
+  "received_at": "2025-03-12T14:30:00Z"
+}
