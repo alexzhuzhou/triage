@@ -3,33 +3,8 @@
 Full-stack application that processes inbound emails for Independent Medical Examination (IME) companies, extracting structured case data using LLM and providing an intuitive web interface for case management.
 
 ## Architecture Overview
+![System Architecture Diagram](docs/architecture.png)
 
-```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│ Gmail/Outlook   │────▶│  IMAP Fetcher   │     │   PostgreSQL    │
-│ (Real Emails)   │     │  + Parser       │     │   Database      │
-└─────────────────┘     └────────┬────────┘     └─────────────────┘
-         OR                      │                       ▲
-┌─────────────────┐              │                       │
-│  Sample Emails  │──────────────┤                       │
-│  (JSON Files)   │              ▼                       │
-└─────────────────┘     ┌─────────────────┐              │
-                        │   FastAPI       │──────────────┘
-                        │   Backend       │
-                        └────────┬────────┘
-                                 │
-                                 ▼
-                        ┌─────────────────┐
-                        │  OpenAI API     │
-                        │  (Extraction)   │
-                        └─────────────────┘
-                                 │
-                                 ▼
-                        ┌─────────────────┐
-                        │  React Frontend │
-                        │  (TypeScript)   │
-                        └─────────────────┘
-```
 
 ## Tech Stack
 
@@ -474,6 +449,8 @@ Action needed: Contact referring party to obtain missing details.
 ```
 
 ## Database Design & Optimization
+### Schema
+![Database Diagram](docs/Databse.png)
 
 ### Normalization
 The database follows **3rd Normal Form (3NF)** with strategic denormalization for performance:
