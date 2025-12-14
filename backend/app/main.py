@@ -4,7 +4,7 @@ FastAPI application entry point.
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import emails, cases
+from app.routers import emails, cases, attachments
 from app.config import settings
 
 # Create FastAPI app
@@ -28,6 +28,7 @@ app.add_middleware(
 # Include routers
 app.include_router(emails.router)
 app.include_router(cases.router)
+app.include_router(attachments.router)
 
 
 @app.get("/")
@@ -40,7 +41,8 @@ def root():
         "docs": "/docs",
         "endpoints": {
             "emails": "/emails",
-            "cases": "/cases"
+            "cases": "/cases",
+            "attachments": "/attachments"
         }
     }
 
