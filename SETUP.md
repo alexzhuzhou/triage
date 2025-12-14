@@ -114,6 +114,12 @@ tests/test_api.py::test_list_cases_empty PASSED
 - `GET /cases/{id}` - Full case details
 - `PATCH /cases/{id}` - Update case
 
+### Query Attachments
+- `GET /attachments/` - List all attachments
+- `GET /attachments/?category=medical_records` - Filter by category
+- `GET /attachments/case/{case_id}/attachments` - All attachments for a case
+- `GET /attachments/by-category/medical_records` - Get medical records only
+
 ### Interactive Docs
 Visit http://localhost:8000/docs for full API documentation with try-it-out functionality.
 
@@ -158,9 +164,11 @@ docker compose up -d
 1. **Interactive API Docs** - http://localhost:8000/docs
 2. **Process sample emails** - See LLM extraction in action
 3. **Query cases by confidence** - See confidence scoring
-4. **Update a case** - Test PATCH endpoint
-5. **Check raw_extraction** - See full LLM response
-6. **Run tests** - Verify everything works
+4. **Filter attachments by category** - Test attachment endpoints
+5. **Update a case** - Test PATCH endpoint
+6. **Check raw_extraction** - See full LLM response
+7. **Explore database indexes** - Check query performance in PostgreSQL
+8. **Run tests** - Verify everything works
 
 ## Architecture Notes
 
@@ -168,17 +176,20 @@ docker compose up -d
 - **Case Matching**: Matches on case_number to link multiple emails
 - **Error Handling**: Never loses data, even on extraction failure
 - **Confidence**: 0.8+ auto-process, 0.5-0.8 review, <0.5 manual
-- **Database**: PostgreSQL with proper foreign keys and indexes
+- **Database**: PostgreSQL with proper foreign keys and performance indexes
+- **Normalization**: 3NF with strategic denormalization (attachments link to both email and case)
+- **Storage Ready**: File storage fields prepared for S3/cloud integration
 
 ## Next Features (Not Implemented - Future Work)
 
 - [ ] Frontend UI (React + TypeScript)
-- [ ] Attachment file storage (S3 or local)
+- [ ] S3/cloud file upload and storage (fields ready)
 - [ ] Email webhook integration
 - [ ] Background job processing (Celery)
 - [ ] User authentication
 - [ ] Audit logging
 - [ ] Export functionality
+- [ ] Full-text search on email content
 
 ---
 

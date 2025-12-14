@@ -153,6 +153,22 @@ curl -X PATCH http://localhost:8000/cases/{case_id} \
   }'
 ```
 
+### Query Attachments
+
+```bash
+# List all attachments
+curl http://localhost:8000/attachments/
+
+# Filter by category
+curl http://localhost:8000/attachments/?category=medical_records
+
+# Get attachments for specific case
+curl http://localhost:8000/attachments/case/{case_id}/attachments
+
+# Get medical records only
+curl http://localhost:8000/attachments/by-category/medical_records
+```
+
 ## API Endpoints
 
 ### Emails
@@ -168,6 +184,13 @@ curl -X PATCH http://localhost:8000/cases/{case_id} \
 - `GET /cases/{id}` - Full case details with emails and attachments
 - `GET /cases/by-number/{case_number}` - Get case by case number
 - `PATCH /cases/{id}` - Update case fields
+
+### Attachments
+
+- `GET /attachments/` - List attachments (filterable by category, case_id)
+- `GET /attachments/{id}` - Get specific attachment details
+- `GET /attachments/by-category/{category}` - Filter by category (medical_records, declaration, cover_letter, other)
+- `GET /attachments/case/{case_id}/attachments` - Get all attachments for a specific case
 
 ## Running Tests
 
@@ -205,7 +228,8 @@ backend/
 │   │   └── ingestion.py     # Email processing pipeline
 │   └── routers/             # API endpoints
 │       ├── cases.py
-│       └── emails.py
+│       ├── emails.py
+│       └── attachments.py
 ├── sample_emails/           # Sample email JSON files
 ├── tests/                   # Test suite
 ├── alembic/                 # Database migrations
@@ -233,10 +257,14 @@ Source records that link to cases:
 - `processing_status`: pending | processing | processed | failed
 
 ### Attachment
-Email attachments with categorization:
-- Links to both email and case
+Email attachments with categorization and storage:
+- Links to both email (source) and case (for efficient querying)
 - `category`: medical_records | declaration | cover_letter | other
 - `content_preview`: First 500 characters
+- **Storage fields** (for S3/cloud integration):
+  - `file_path`: Cloud storage path (e.g., "s3://bucket/cases/NF-39281/file.pdf")
+  - `file_size`: File size in bytes
+  - `storage_provider`: Storage backend (s3, azure, local, etc.)
 
 ## LLM Extraction
 
@@ -258,6 +286,45 @@ The system uses OpenAI's GPT-4o with structured output (function calling) to ext
 - `≥ 0.8`: High confidence - auto-process
 - `0.5 - 0.8`: Medium confidence - flag for review
 - `< 0.5`: Low confidence - requires manual review
+
+## Database Design & Optimization
+
+### Normalization
+The database follows **3rd Normal Form (3NF)** with strategic denormalization for performance:
+
+**Normalized Design:**
+- Each table has a single primary key (UUID)
+- No repeating groups
+- No transitive dependencies
+
+**Strategic Denormalization:**
+- **Attachments link to both email and case**: Enables fast queries without JOINs
+- **Confidence stored in cases table**: Allows filtering without parsing JSON
+- **Indexes on frequently queried columns**: Optimizes query performance
+
+### Performance Indexes
+
+**Cases Table:**
+- `case_number` (unique) - For case matching
+- `status` - For filtering by case status
+- `extraction_confidence` - For confidence-based queries
+- `created_at` - For sorting by date
+- `exam_date` - For scheduling queries
+
+**Emails Table:**
+- `case_id` - For JOIN operations
+- `processing_status` - For status filtering
+- `received_at` - For date sorting
+
+**Attachments Table:**
+- `email_id` - For JOIN operations
+- `case_id` - For case queries (enables direct lookup)
+- `category` - For category filtering
+
+### Query Performance
+With indexes, queries scale from **O(n)** to **O(log n)**:
+- Small datasets (< 100 rows): Seq scan is faster
+- Large datasets (1000+ rows): Index scan is 10-100x faster
 
 ## Database Management
 
