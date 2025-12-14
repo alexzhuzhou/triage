@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from app.models.case import Case, CaseStatus
 from app.models.email import Email, EmailProcessingStatus
 from app.models.attachment import Attachment, AttachmentCategory
-from app.schemas.email import EmailIngest
+from app.schemas.email import EmailIngest, AttachmentData
 from app.schemas.extraction import CaseExtraction
 from app.services.extraction import extract_case_from_email
 
@@ -168,6 +168,10 @@ def process_email(db: Session, email_data: EmailIngest) -> Email:
         case = find_or_create_case(db, extraction)
         email.case_id = case.id
 
+        # Add email to session and flush to get the ID
+        db.add(email)
+        db.flush()  # This assigns the ID to email.id
+
         # Process attachments
         for att_data, att_extraction in zip(email_data.attachments, extraction.attachments):
             attachment = Attachment(
@@ -184,14 +188,15 @@ def process_email(db: Session, email_data: EmailIngest) -> Email:
         # Mark as processed
         email.processing_status = EmailProcessingStatus.PROCESSED
         email.processed_at = datetime.utcnow()
-
-        db.add(email)
         db.commit()
         db.refresh(email)
 
         return email
 
     except Exception as e:
+        # Rollback any partial transaction
+        db.rollback()
+
         # Mark as failed but keep the data
         email.processing_status = EmailProcessingStatus.FAILED
         email.error_message = str(e)
@@ -235,7 +240,7 @@ def batch_process_sample_emails(db: Session, sample_dir: str = "sample_emails") 
             continue
 
         try:
-            with open(base_path / filename, 'r') as f:
+            with open(base_path / filename, 'r', encoding='utf-8') as f:
                 email_json = json.load(f)
 
             # Convert to EmailIngest schema
@@ -245,11 +250,11 @@ def batch_process_sample_emails(db: Session, sample_dir: str = "sample_emails") 
                 recipients=email_json['recipients'],
                 body=email_json['body'],
                 attachments=[
-                    {
-                        "filename": att['filename'],
-                        "content_type": att.get('content_type'),
-                        "text_content": att.get('text_content')
-                    }
+                    AttachmentData(
+                        filename=att['filename'],
+                        content_type=att.get('content_type'),
+                        text_content=att.get('text_content')
+                    )
                     for att in email_json.get('attachments', [])
                 ],
                 received_at=datetime.fromisoformat(email_json['received_at'].replace('Z', '+00:00'))
