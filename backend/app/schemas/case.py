@@ -49,6 +49,9 @@ class AttachmentResponse(BaseModel):
     content_type: Optional[str]
     category: str
     category_reason: Optional[str]
+    file_path: Optional[str] = None
+    file_size: Optional[int] = None
+    storage_provider: Optional[str] = None
     created_at: datetime
 
     class Config:

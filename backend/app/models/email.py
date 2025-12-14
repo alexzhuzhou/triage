@@ -3,7 +3,7 @@ Email model - represents source emails that are processed.
 """
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum, JSON
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum, JSON, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import enum
@@ -57,6 +57,13 @@ class Email(Base):
     # Relationships
     case = relationship("Case", back_populates="emails")
     attachments = relationship("Attachment", back_populates="email", cascade="all, delete-orphan")
+
+    # Indexes for faster lookups
+    __table_args__ = (
+        Index('ix_emails_case_id', 'case_id'),
+        Index('ix_emails_processing_status', 'processing_status'),
+        Index('ix_emails_received_at', 'received_at'),
+    )
 
     def __repr__(self):
         return f"<Email {self.id} - {self.subject}>"

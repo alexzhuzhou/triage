@@ -3,7 +3,7 @@ Attachment model - represents email attachments.
 """
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Enum, Integer, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import enum
@@ -40,6 +40,11 @@ class Attachment(Base):
     content_type = Column(String, nullable=True)  # MIME type
     content_preview = Column(Text, nullable=True)  # First 500 chars
 
+    # File storage (for future S3 integration)
+    file_path = Column(String, nullable=True)  # S3 path: "s3://bucket/cases/{case_number}/file.pdf"
+    file_size = Column(Integer, nullable=True)  # Size in bytes
+    storage_provider = Column(String, nullable=True)  # "s3", "azure", "local", etc.
+
     # Categorization (from LLM extraction)
     category = Column(Enum(AttachmentCategory), nullable=False)
     category_reason = Column(Text, nullable=True)  # Explanation for "other" category
@@ -50,6 +55,13 @@ class Attachment(Base):
     # Relationships
     email = relationship("Email", back_populates="attachments")
     case = relationship("Case", back_populates="attachments")
+
+    # Indexes for faster lookups
+    __table_args__ = (
+        Index('ix_attachments_email_id', 'email_id'),
+        Index('ix_attachments_case_id', 'case_id'),
+        Index('ix_attachments_category', 'category'),
+    )
 
     def __repr__(self):
         return f"<Attachment {self.filename} - {self.category}>"

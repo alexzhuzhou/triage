@@ -3,7 +3,7 @@ Case model - represents an IME case.
 """
 import uuid
 from datetime import datetime, date, time
-from sqlalchemy import Column, String, Date, Time, DateTime, Float, Text, Enum
+from sqlalchemy import Column, String, Date, Time, DateTime, Float, Text, Enum, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 import enum
@@ -59,6 +59,14 @@ class Case(Base):
     # Relationships
     emails = relationship("Email", back_populates="case", cascade="all, delete-orphan")
     attachments = relationship("Attachment", back_populates="case", cascade="all, delete-orphan")
+
+    # Indexes for faster lookups
+    __table_args__ = (
+        Index('ix_cases_status', 'status'),
+        Index('ix_cases_extraction_confidence', 'extraction_confidence'),
+        Index('ix_cases_created_at', 'created_at'),
+        Index('ix_cases_exam_date', 'exam_date'),
+    )
 
     def __repr__(self):
         return f"<Case {self.case_number} - {self.patient_name}>"
