@@ -1,0 +1,19 @@
+{
+  "subject": "Additional Records - Case NF-39281",
+  "sender": "referrals@lawfirmabc.com",
+  "recipients": ["intake@imecompany.com"],
+  "body": "Hi there,\n\nSending over additional documentation for Johnathan Doe, case NF-39281.\n\nWe just received updated MRI results and the treating physician's latest notes that you'll need for the evaluation.\n\nThanks!",
+  "attachments": [
+    {
+      "filename": "Doe_J_MRI_Results_March2025.pdf",
+      "content_type": "application/pdf",
+      "text_content": "MRI Results - March 5, 2025: Lumbar spine imaging reveals L4-L5 disc herniation with moderate central canal stenosis. Nerve root compression evident at L5. Findings consistent with patient's reported radicular pain symptoms. Recommendation: Surgical consultation may be warranted depending on response to conservative treatment."
+    },
+    {
+      "filename": "Treating_Physician_Notes.pdf",
+      "content_type": "application/pdf",
+      "text_content": "Progress Notes - Dr. Michael Chen, Orthopedic Surgeon: Patient Johnathan Doe continues to report persistent lower back pain with radiation to right leg. Physical therapy has provided minimal relief. Patient has difficulty with prolonged sitting or standing. Current treatment includes NSAIDs and physical therapy 3x weekly. Considering epidural steroid injection if symptoms do not improve within 4 weeks."
+    }
+  ],
+  "received_at": "2025-03-12T10:45:00Z"
+}

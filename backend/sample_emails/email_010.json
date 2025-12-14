@@ -1,0 +1,19 @@
+{
+  "subject": "FW: FW: ime stuff",
+  "sender": "j.miller@tempmail.co",
+  "recipients": ["scheduling@imegroup.com", "intake@imecompany.com"],
+  "body": "yo\n\ngot this from client forwarding to u\n\n---forwarded msg---\nhey julie can u set up that dr appt thing for me?? \nname: Rodriguez, Patricia (patty)\nfile#: idk maybe 2025-something? or PD-something check with office\ndr type: ortho i think? back problems\nwhen: doesnt matter just not mondays i got physical therapy\nlocation: anywhere in san diego county is fine\ndeadline: boss wants it soon like maybe 3 weeks?\n\nattaching pics of my medical stuff sorry for bad quality took pics with phone\n\nthnx\n---end forward---\n\nplz handle thx\nJ",
+  "attachments": [
+    {
+      "filename": "IMG_20250403_1.jpg",
+      "content_type": "image/jpeg",
+      "text_content": "Photo of medical document - partially visible text: Patient Patricia Rodriguez, female, age 38. Complaint: chronic lower back pain for 6 months. X-ray shows degenerative disc disease L3-L4. Prescribed muscle relaxants and physical therapy. Patient works as warehouse supervisor, reports pain worsens with lifting and bending."
+    },
+    {
+      "filename": "IMG_20250403_2.jpg",
+      "content_type": "image/jpeg",
+      "text_content": "Photo of prescription - hard to read, appears to be: Cyclobenzaprine 10mg, take as needed for muscle spasm. Ibuprofen 800mg three times daily with food. Follow up in 4 weeks if no improvement. Dr. signature illegible. Date: February 2025."
+    }
+  ],
+  "received_at": "2025-04-03T15:45:00Z"
+}

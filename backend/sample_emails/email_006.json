@@ -1,0 +1,14 @@
+{
+  "subject": "urgent ime",
+  "sender": "paralegal.office@quickmail.com",
+  "recipients": ["scheduling@imegroup.com"],
+  "body": "hi need ime done asap!!!\n\npatient: michael thompson or maybe thomson not sure how its spelled\ncase: could be MT-8821 or 8281??? check ur records\n\nneeds cardio checkup heart stuff\nwhen: next week sometime afternoon preferably\nwhere: around LA area maybe orange county\n\nattaching whatever files i have boss said report needed like 2 weeks ago so please hurry\n\nlmk\n- katie",
+  "attachments": [
+    {
+      "filename": "scan001.pdf",
+      "content_type": "application/pdf",
+      "text_content": "Handwritten notes - difficult to read: Patient Michael Thompson, age 52, chest pain episodes. EKG from 02/15/2025 shows irregular rhythm. Cardiologist appointment scheduled. Patient reports shortness of breath during physical activity. Family history of heart disease."
+    }
+  ],
+  "received_at": "2025-04-02T09:15:00Z"
+}

@@ -1,0 +1,19 @@
+{
+  "subject": "New Cardiology IME Referral - Angela Chen - Case #CV-2025-9943",
+  "sender": "referrals@healthlawpartners.com",
+  "recipients": ["intake@imecompany.com"],
+  "body": "Dear IME Scheduling Team,\n\nWe are referring a cardiovascular Independent Medical Examination for our client:\n\nFull Name: Angela Chen\nDate of Birth: 03/15/1972\nCase Reference Number: CV-2025-9943\nExamination Type: Cardiovascular/Cardiology IME\nRequested Examination Date: April 15, 2025\nRequested Time: 10:00 AM\nPreferred Location: Los Angeles, CA\n\nReferring Law Firm: Health Law Partners LLP\nAttorney: Robert Martinez, Esq.\nDirect Contact: referrals@healthlawpartners.com\nPhone: (555) 123-4567\nReport Deadline: April 29, 2025\n\nBackground: Client experienced cardiac event at workplace on February 1, 2025. Subsequent diagnosis of stress-induced cardiomyopathy. Please find attached cardiologist reports, EKG results, and echocardiogram findings.\n\nPlease confirm availability and provide any additional requirements.\n\nRespectfully,\nRobert Martinez, Esq.\nHealth Law Partners LLP",
+  "attachments": [
+    {
+      "filename": "Chen_A_Cardiology_Report.pdf",
+      "content_type": "application/pdf",
+      "text_content": "Cardiology Consultation Report - Angela Chen, DOB 03/15/1972. Patient presented to ER on February 1, 2025 with chest pain and shortness of breath. EKG showed ST-segment abnormalities. Troponin levels elevated. Echocardiogram revealed reduced ejection fraction (40%). Diagnosis: Takotsubo cardiomyopathy (stress-induced cardiomyopathy). Patient reports high-stress work environment preceding cardiac event. Currently on beta-blockers and ACE inhibitors. Follow-up echocardiogram in 8 weeks to assess cardiac function recovery."
+    },
+    {
+      "filename": "Chen_A_EKG_Results.pdf",
+      "content_type": "application/pdf",
+      "text_content": "Electrocardiogram Results: February 1, 2025 - Abnormal EKG showing T-wave inversions in precordial leads. Heart rate: 92 bpm. Rhythm: Sinus rhythm. ST-segment changes consistent with acute coronary syndrome. Follow-up EKG February 15, 2025 shows improvement with resolution of ST-segment changes. Current EKG March 1, 2025 demonstrates continued normalization of cardiac electrical activity."
+    }
+  ],
+  "received_at": "2025-04-03T11:00:00Z"
+}

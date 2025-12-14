@@ -1,0 +1,19 @@
+{
+  "subject": "IME Request - Psychiatric Evaluation - Case WC-2025-4432",
+  "sender": "claims@pacificinsurance.com",
+  "recipients": ["scheduling@imegroup.com"],
+  "body": "Good afternoon,\n\nWe are requesting a psychiatric Independent Medical Examination for the following claimant:\n\nPatient Name: Sarah Martinez\nDate of Birth: 08/22/1985\nCase Number: WC-2025-4432\nType of Examination: Psychiatric IME\nPreferred Date: April 10, 2025\nPreferred Time: 1:00 PM\nLocation: San Francisco, CA\n\nReferring Organization: Pacific Insurance Group\nContact Person: Jennifer Adams, Claims Adjuster\nContact Email: claims@pacificinsurance.com\nReport Due Date: April 24, 2025\n\nThe claimant has been experiencing anxiety and depression following a workplace incident. Please find attached medical records and the employer's incident report.\n\nPlease confirm availability at your earliest convenience.\n\nBest regards,\nJennifer Adams\nPacific Insurance Group",
+  "attachments": [
+    {
+      "filename": "Martinez_S_Psych_Records.pdf",
+      "content_type": "application/pdf",
+      "text_content": "Psychiatric evaluation records for Sarah Martinez. Patient reports severe anxiety and panic attacks following workplace incident on January 10, 2025. Symptoms include difficulty sleeping, intrusive thoughts, avoidance behaviors, and difficulty concentrating. Previous psychiatric history: treated for mild depression in 2020. Current medications: Sertraline 50mg daily. Patient has attended 6 therapy sessions with limited improvement. Psychiatrist recommends continued treatment and possible medication adjustment."
+    },
+    {
+      "filename": "Employer_Incident_Report.pdf",
+      "content_type": "application/pdf",
+      "text_content": "Incident Report: On January 10, 2025, employee Sarah Martinez witnessed a serious workplace accident involving heavy machinery. Employee reported immediate emotional distress and was sent home. Follow-up indicated development of post-traumatic stress symptoms. Employee has been on modified duty since January 15, 2025. Request for psychiatric evaluation to determine work capacity and treatment needs."
+    }
+  ],
+  "received_at": "2025-04-01T14:30:00Z"
+}
