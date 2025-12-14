@@ -3,7 +3,7 @@
 Full-stack application that processes inbound emails for Independent Medical Examination (IME) companies, extracting structured case data using LLM and providing an intuitive web interface for case management.
 
 ## Architecture Overview
-![System Architecture Diagram](docs/rchitecture.png)
+![System Architecture Diagram](docs/Achitecture.png)
 
 
 ## Tech Stack
