@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import type { Case } from '../types';
 import { ConfidenceBadge } from './ConfidenceBadge';
 import { StatusBadge } from './StatusBadge';
+import { formatDateOnly } from '../utils/dateUtils';
 
 interface CaseCardProps {
   case: Case;
@@ -33,7 +34,7 @@ export function CaseCard({ case: caseData }: CaseCardProps) {
           <div className="flex items-center text-sm">
             <span className="text-gray-500 w-24">Exam Date:</span>
             <span className="text-gray-900">
-              {new Date(caseData.exam_date).toLocaleDateString()}
+              {formatDateOnly(caseData.exam_date)}
               {caseData.exam_time && ` at ${caseData.exam_time}`}
             </span>
           </div>

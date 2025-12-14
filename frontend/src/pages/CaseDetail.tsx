@@ -7,6 +7,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { CategoryBadge } from '../components/CategoryBadge';
 import { AttachmentPreviewModal } from '../components/AttachmentPreviewModal';
 import { EmailPreviewModal } from '../components/EmailPreviewModal';
+import { formatDateOnly } from '../utils/dateUtils';
 import type { Attachment, Email } from '../types';
 
 export function CaseDetail() {
@@ -132,7 +133,7 @@ export function CaseDetail() {
                     Exam Date & Time
                   </label>
                   <p className="mt-1 text-gray-900">
-                    {new Date(caseData.exam_date).toLocaleDateString()}
+                    {formatDateOnly(caseData.exam_date)}
                     {caseData.exam_time && ` at ${caseData.exam_time}`}
                   </p>
                 </div>
@@ -165,7 +166,7 @@ export function CaseDetail() {
                     Report Due Date
                   </label>
                   <p className="mt-1 text-gray-900">
-                    {new Date(caseData.report_due_date).toLocaleDateString()}
+                    {formatDateOnly(caseData.report_due_date)}
                   </p>
                 </div>
               )}

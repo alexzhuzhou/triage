@@ -1,20 +1,19 @@
 {
-  "id": "email-003",
-  "subject": "Fwd: IME needed ASAP",
-  "sender": "jmiller@quickreferrals.net",
-  "recipients": ["intake@imecompany.com"],
-  "body": "hey there,\n\nneed to get someone seen for neuro eval. details below from attorney:\n\n---\nclaimant maria rodriguez\nfile# 2024-WC-8891 (might also be listed as WC8891 in your system)\nneeds neurological evaluation, had TBI from workplace fall\nthey want it done sometime next week if possible, preferably morning appointment\nwe're located in san diego area\nlet me know what you have available\nreport needed within 2 weeks of exam\n---\n\nattached her records and some kind of letter from the adjuster\n\nthx!\nJohn Miller\nQuick Referrals LLC",
+  "subject": "IME Request",
+  "sender": "intake@randomlaw.com",
+  "recipients": ["scheduling@imegroup.com"],
+  "body": "Hi,\n\nWe need to set up an IME asap. Client is Robert L. Hernandez.\nCase number might be RH-99102 or something close to that.\n\nExam needed: Neurology.\nVenue likely San Diego, CA.\nWe are hoping for sometime mid April.\n\nDocs attached.",
   "attachments": [
     {
-      "filename": "rodriguez_records_combined.pdf",
+      "filename": "records1.pdf",
       "content_type": "application/pdf",
-      "text_content": "Emergency room visit 06/18/2024: Patient Maria Rodriguez, 42yo female, presented after fall from ladder at workplace. Loss of consciousness approximately 2 minutes. CT scan shows mild traumatic brain injury. Admitted for observation. Complained of severe headaches, dizziness, and memory issues..."
+      "text_content": "Medical records for Robert L. Hernandez. Patient is a 38-year-old male who sustained head trauma in a motor vehicle accident on February 3, 2025. Presented to ER with complaints of severe headaches, dizziness, and difficulty concentrating. CT scan performed showed no acute bleeding but mild concussion suspected. Neurology consult recommended. Patient has been experiencing ongoing symptoms including memory lapses, sensitivity to light, and intermittent nausea. Previous medical history unremarkable. Currently taking ibuprofen for pain management."
     },
     {
-      "filename": "adjuster_ltr.pdf",
+      "filename": "records2.pdf",
       "content_type": "application/pdf",
-      "text_content": "To Whom It May Concern: This letter authorizes the Independent Medical Examination for claimant Maria Rodriguez, claim number 2024-WC-8891. Please forward all reports to our office within 14 business days of examination. Contact: Jennifer Adams, Claims Adjuster, Pacific Insurance Group."
+      "text_content": "Additional documentation for Hernandez case. Follow-up visit on February 17, 2025 showed persistent post-concussive symptoms. Patient unable to return to work due to cognitive difficulties and ongoing headaches. Referred for neuropsychological testing. MRI ordered to rule out any structural abnormalities. Patient reports difficulty sleeping and mood changes since the accident. Family reports personality changes and increased irritability."
     }
   ],
-  "received_at": "2025-03-11T16:45:00Z"
+  "received_at": "2025-03-28T14:35:00Z"
 }

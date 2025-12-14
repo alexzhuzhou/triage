@@ -27,6 +27,10 @@ def find_or_create_case(
     """
     Find an existing case by case_number or create a new one.
 
+    Update Strategy:
+    - If new extraction has HIGHER confidence: Update all fields (Option 3)
+    - If new extraction has LOWER confidence: Only fill empty fields, flag conflicts (Option 4)
+
     Args:
         db: Database session
         extraction: Extracted case data
@@ -39,48 +43,127 @@ def find_or_create_case(
     case = db.query(Case).filter(Case.case_number == extraction.case_number).first()
 
     if case:
-        # Update existing case with new information (if more complete)
-        # Only update fields that are None in existing case or have higher confidence
-        if extraction.exam_date and not case.exam_date:
-            try:
-                case.exam_date = date.fromisoformat(extraction.exam_date)
-            except (ValueError, TypeError):
-                pass
+        current_confidence = case.extraction_confidence or 0
+        new_confidence = extraction.confidence
+        conflicts = []  # Track conflicts for manual review
 
-        if extraction.exam_time and not case.exam_time:
-            try:
-                hour, minute = map(int, extraction.exam_time.split(':'))
-                case.exam_time = time_type(hour, minute)
-            except (ValueError, TypeError):
-                pass
+        # Option 3: High confidence extraction - update ALL fields
+        if new_confidence > current_confidence:
+            # Update exam_date
+            if extraction.exam_date:
+                try:
+                    case.exam_date = date.fromisoformat(extraction.exam_date)
+                except (ValueError, TypeError):
+                    pass
 
-        if extraction.exam_location and not case.exam_location:
-            case.exam_location = extraction.exam_location
+            # Update exam_time
+            if extraction.exam_time:
+                try:
+                    hour, minute = map(int, extraction.exam_time.split(':'))
+                    case.exam_time = time_type(hour, minute)
+                except (ValueError, TypeError):
+                    pass
 
-        if extraction.referring_party and not case.referring_party:
-            case.referring_party = extraction.referring_party
+            # Update other fields
+            if extraction.exam_location:
+                case.exam_location = extraction.exam_location
+            if extraction.referring_party:
+                case.referring_party = extraction.referring_party
+            if extraction.referring_email:
+                case.referring_email = extraction.referring_email
 
-        if extraction.referring_email and not case.referring_email:
-            case.referring_email = extraction.referring_email
+            # Update report_due_date
+            if extraction.report_due_date:
+                try:
+                    case.report_due_date = date.fromisoformat(extraction.report_due_date)
+                except (ValueError, TypeError):
+                    pass
 
-        if extraction.report_due_date and not case.report_due_date:
-            try:
-                case.report_due_date = date.fromisoformat(extraction.report_due_date)
-            except (ValueError, TypeError):
-                pass
+            # Update confidence
+            case.extraction_confidence = new_confidence
 
-        # Update confidence if higher
-        if extraction.confidence > (case.extraction_confidence or 0):
-            case.extraction_confidence = extraction.confidence
+            # Add note about high-confidence update
+            update_note = f"[{datetime.utcnow().isoformat()}] AUTO-UPDATED: Higher confidence extraction ({new_confidence:.2f} > {current_confidence:.2f})"
+            if extraction.extraction_notes:
+                update_note += f" - {extraction.extraction_notes}"
 
-        # Append to notes if there are extraction notes
-        if extraction.extraction_notes:
             if case.notes:
-                case.notes += f"\n\n[{datetime.utcnow().isoformat()}] {extraction.extraction_notes}"
+                case.notes += f"\n\n{update_note}"
             else:
-                case.notes = extraction.extraction_notes
+                case.notes = update_note
+
+        # Option 4: Lower/equal confidence - fill empty fields, flag conflicts
+        else:
+            # Check for conflicts and flag them
+            if extraction.exam_date:
+                try:
+                    new_exam_date = date.fromisoformat(extraction.exam_date)
+                    if case.exam_date and case.exam_date != new_exam_date:
+                        conflicts.append(f"Exam Date: {case.exam_date} -> {new_exam_date}")
+                    elif not case.exam_date:
+                        case.exam_date = new_exam_date
+                except (ValueError, TypeError):
+                    pass
+
+            if extraction.exam_time:
+                try:
+                    hour, minute = map(int, extraction.exam_time.split(':'))
+                    new_exam_time = time_type(hour, minute)
+                    if case.exam_time and case.exam_time != new_exam_time:
+                        conflicts.append(f"Exam Time: {case.exam_time} -> {new_exam_time}")
+                    elif not case.exam_time:
+                        case.exam_time = new_exam_time
+                except (ValueError, TypeError):
+                    pass
+
+            if extraction.exam_location:
+                if case.exam_location and case.exam_location != extraction.exam_location:
+                    conflicts.append(f"Location: {case.exam_location} -> {extraction.exam_location}")
+                elif not case.exam_location:
+                    case.exam_location = extraction.exam_location
+
+            if extraction.referring_party:
+                if case.referring_party and case.referring_party != extraction.referring_party:
+                    conflicts.append(f"Referring Party: {case.referring_party} -> {extraction.referring_party}")
+                elif not case.referring_party:
+                    case.referring_party = extraction.referring_party
+
+            if extraction.referring_email:
+                if case.referring_email and case.referring_email != extraction.referring_email:
+                    conflicts.append(f"Referring Email: {case.referring_email} -> {extraction.referring_email}")
+                elif not case.referring_email:
+                    case.referring_email = extraction.referring_email
+
+            if extraction.report_due_date:
+                try:
+                    new_due_date = date.fromisoformat(extraction.report_due_date)
+                    if case.report_due_date and case.report_due_date != new_due_date:
+                        conflicts.append(f"Report Due: {case.report_due_date} -> {new_due_date}")
+                    elif not case.report_due_date:
+                        case.report_due_date = new_due_date
+                except (ValueError, TypeError):
+                    pass
+
+            # If conflicts found, flag for manual review
+            if conflicts:
+                conflict_note = f"[{datetime.utcnow().isoformat()}] ⚠️ MANUAL REVIEW NEEDED (Low confidence: {new_confidence:.2f})\nConflicts detected:\n" + "\n".join(f"  - {c}" for c in conflicts)
+
+                if case.notes:
+                    case.notes += f"\n\n{conflict_note}"
+                else:
+                    case.notes = conflict_note
+
+            # Append extraction notes if any
+            if extraction.extraction_notes and not conflicts:
+                if case.notes:
+                    case.notes += f"\n\n[{datetime.utcnow().isoformat()}] {extraction.extraction_notes}"
+                else:
+                    case.notes = extraction.extraction_notes
 
         case.updated_at = datetime.utcnow()
+
+        # Check for missing critical information
+        _flag_missing_critical_fields(case)
 
     else:
         # Create new case
@@ -125,7 +208,52 @@ def find_or_create_case(
         db.add(case)
         db.flush()  # Get the case ID
 
+        # Check for missing critical information in new case
+        _flag_missing_critical_fields(case)
+
     return case
+
+
+def _flag_missing_critical_fields(case: Case) -> None:
+    """
+    Check for missing critical fields and add a follow-up flag to notes.
+
+    Critical fields:
+    - exam_date: When the exam should occur
+    - exam_location: Where the exam will take place
+    - exam_time: What time the exam is scheduled (less critical)
+    - report_due_date: Deadline for report submission
+
+    Args:
+        case: The case to check
+    """
+    missing_fields = []
+
+    # Check critical fields
+    if not case.exam_date:
+        missing_fields.append("Exam Date")
+
+    if not case.exam_location:
+        missing_fields.append("Exam Location")
+
+    if not case.report_due_date:
+        missing_fields.append("Report Due Date")
+
+    # Check semi-critical fields
+    if not case.exam_time:
+        missing_fields.append("Exam Time")
+
+    # If any critical info is missing, flag for follow-up
+    if missing_fields:
+        flag_note = f"[{datetime.utcnow().isoformat()}] 🔔 FOLLOW-UP REQUIRED\nMissing critical information:\n" + "\n".join(f"  - {field}" for field in missing_fields)
+        flag_note += "\n\nAction needed: Contact referring party to obtain missing details."
+
+        if case.notes:
+            # Check if we already have a follow-up flag (avoid duplicates)
+            if "FOLLOW-UP REQUIRED" not in case.notes:
+                case.notes += f"\n\n{flag_note}"
+        else:
+            case.notes = flag_note
 
 
 def process_email(db: Session, email_data: EmailIngest) -> Email:
@@ -148,7 +276,7 @@ def process_email(db: Session, email_data: EmailIngest) -> Email:
         sender=email_data.sender,
         recipients=email_data.recipients,
         body=email_data.body,
-        received_at=email_data.received_at,
+        received_at=email_data.received_at or datetime.utcnow(),
         processing_status=EmailProcessingStatus.PROCESSING
     )
 
@@ -257,7 +385,7 @@ def batch_process_sample_emails(db: Session, sample_dir: str = "sample_emails") 
                     )
                     for att in email_json.get('attachments', [])
                 ],
-                received_at=datetime.fromisoformat(email_json['received_at'].replace('Z', '+00:00'))
+                received_at=datetime.fromisoformat(email_json['received_at'].replace('Z', '+00:00')) if email_json.get('received_at') else None
             )
 
             # Process email

@@ -1,9 +1,14 @@
 {
-  "id": "email-002",
-  "subject": "Re: NF-39281 - Scheduling Update",
-  "sender": "referrals@lawfirmabc.com",
-  "recipients": ["intake@imecompany.com"],
-  "body": "Hi,\n\nJust following up on case NF-39281 (Johnathan Doe). The patient needs to reschedule the exam.\n\nNew Date: March 22, 2025\nNew Time: 10:00 AM\nSame location (Los Angeles)\n\nCan you please confirm the new time works?\n\nThanks,\nSarah",
-  "attachments": [],
-  "received_at": "2025-03-12T14:30:00Z"
+  "subject": "RE: IME for Jane Smith – Case 2024-7781",
+  "sender": "scheduling@imegroup.com",
+  "recipients": ["referrals@lawfirmabc.com"],
+  "body": "Hello,\n\nFollowing up on the IME for Jane Smith (Case No. 2024-7781).\nThe exam has been confirmed for April 2, 2025 at 9:00 AM.\n\nPlease ensure the final report is submitted no later than April 16, 2025.\n\nBest,\nScheduling Team",
+  "attachments": [
+    {
+      "filename": "Cover_Letter_Jane_Smith.pdf",
+      "content_type": "application/pdf",
+      "text_content": "Cover letter regarding IME scheduling for Jane Smith. Dear Law Firm ABC, This letter confirms the scheduling of the Independent Medical Examination for your client, Jane Smith, Case No. 2024-7781. The examination is scheduled for April 2, 2025 at 9:00 AM at our Los Angeles office. Please have the claimant arrive 15 minutes early to complete necessary intake forms. The examining physician will be Dr. Robert Chen, Board Certified in Orthopedic Surgery. The final report will be delivered within 14 days of the examination date. Should you need to reschedule, please contact us at least 48 hours in advance."
+    }
+  ],
+  "received_at": "2025-03-25T11:20:00Z"
 }

@@ -25,7 +25,10 @@ class EmailIngest(BaseModel):
         default_factory=list,
         description="List of attachments"
     )
-    received_at: datetime = Field(description="When the email was received")
+    received_at: Optional[datetime] = Field(
+        default=None,
+        description="When the email was received (defaults to current time if not provided)"
+    )
 
 
 class EmailResponse(BaseModel):
