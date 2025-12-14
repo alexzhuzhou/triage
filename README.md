@@ -1,6 +1,6 @@
 # Triage - IME Email Processing System
 
-Backend service that processes inbound emails for Independent Medical Examination (IME) companies, extracting structured case data using LLM and persisting to a PostgreSQL database.
+Full-stack application that processes inbound emails for Independent Medical Examination (IME) companies, extracting structured case data using LLM and providing an intuitive web interface for case management.
 
 ## Architecture Overview
 
@@ -15,6 +15,12 @@ Backend service that processes inbound emails for Independent Medical Examinatio
                         │  OpenAI API     │
                         │  (Extraction)   │
                         └─────────────────┘
+                                 │
+                                 ▼
+                        ┌─────────────────┐
+                        │  React Frontend │
+                        │  (TypeScript)   │
+                        └─────────────────┘
 ```
 
 ## Tech Stack
@@ -22,6 +28,9 @@ Backend service that processes inbound emails for Independent Medical Examinatio
 - **Backend**: FastAPI (Python 3.11+)
 - **Database**: PostgreSQL 15 + SQLAlchemy + Alembic
 - **LLM**: OpenAI GPT-4o for structured data extraction
+- **Frontend**: React 18 + TypeScript + Vite
+- **Styling**: TailwindCSS
+- **State Management**: React Query (@tanstack/react-query)
 - **Testing**: Pytest
 
 ## Quick Start
@@ -92,17 +101,39 @@ The API will be available at:
 - **Interactive Docs**: http://localhost:8000/docs
 - **Alternative Docs**: http://localhost:8000/redoc
 
+### 7. Start the Frontend (Optional)
+
+```bash
+cd frontend
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+```
+
+The frontend will be available at:
+- **UI**: http://localhost:5173
+- API requests are proxied to backend automatically
+
 ## Usage
 
 ### Process Sample Emails
 
-The project includes sample email files in `backend/sample_emails/`. Process them all at once:
+The project includes 3 sample email files in `backend/sample_emails/`:
+
+1. **email_001.json** - Clean referral (Johnathan Doe, NF-39281, Orthopedic)
+2. **email_002.json** - Scheduling confirmation (Jane Smith, 2024-7781)
+3. **email_003.json** - Messy intake (Robert L. Hernandez, RH-99102, Neurology)
+
+Process them all at once:
 
 ```bash
 curl -X POST http://localhost:8000/emails/simulate-batch
 ```
 
-Or via the interactive docs at http://localhost:8000/docs
+Or via the interactive docs at http://localhost:8000/docs, or using the frontend at http://localhost:5173/process
 
 ### Ingest Individual Email
 
@@ -114,10 +145,11 @@ curl -X POST http://localhost:8000/emails/ingest \
     "sender": "referrals@lawfirm.com",
     "recipients": ["intake@ime.com"],
     "body": "Case details...",
-    "attachments": [],
-    "received_at": "2025-03-10T10:00:00Z"
+    "attachments": []
   }'
 ```
+
+Note: `received_at` is optional and defaults to current time if not provided.
 
 ### List Cases
 
@@ -210,31 +242,63 @@ pytest tests/test_api.py -v
 ## Project Structure
 
 ```
-backend/
-├── app/
-│   ├── main.py              # FastAPI app entry point
-│   ├── config.py            # Settings configuration
-│   ├── database.py          # Database setup
-│   ├── models/              # SQLAlchemy ORM models
-│   │   ├── case.py
-│   │   ├── email.py
-│   │   └── attachment.py
-│   ├── schemas/             # Pydantic schemas
-│   │   ├── case.py
-│   │   ├── email.py
-│   │   └── extraction.py    # LLM extraction schema
-│   ├── services/            # Business logic
-│   │   ├── extraction.py    # OpenAI integration
-│   │   └── ingestion.py     # Email processing pipeline
-│   └── routers/             # API endpoints
-│       ├── cases.py
-│       ├── emails.py
-│       └── attachments.py
-├── sample_emails/           # Sample email JSON files
-├── tests/                   # Test suite
-├── alembic/                 # Database migrations
-├── requirements.txt
-└── pytest.ini
+triage/
+├── backend/
+│   ├── app/
+│   │   ├── main.py              # FastAPI app entry point
+│   │   ├── config.py            # Settings configuration
+│   │   ├── database.py          # Database setup
+│   │   ├── models/              # SQLAlchemy ORM models
+│   │   │   ├── case.py
+│   │   │   ├── email.py
+│   │   │   └── attachment.py
+│   │   ├── schemas/             # Pydantic schemas
+│   │   │   ├── case.py
+│   │   │   ├── email.py
+│   │   │   └── extraction.py    # LLM extraction schema
+│   │   ├── services/            # Business logic
+│   │   │   ├── extraction.py    # OpenAI integration
+│   │   │   └── ingestion.py     # Email processing pipeline
+│   │   └── routers/             # API endpoints
+│   │       ├── cases.py
+│   │       ├── emails.py
+│   │       └── attachments.py
+│   ├── sample_emails/           # Sample email JSON files
+│   ├── tests/                   # Test suite
+│   ├── alembic/                 # Database migrations
+│   ├── requirements.txt
+│   └── pytest.ini
+├── frontend/
+│   ├── src/
+│   │   ├── components/          # Reusable UI components
+│   │   │   ├── Layout.tsx
+│   │   │   ├── CaseCard.tsx
+│   │   │   ├── ConfidenceBadge.tsx
+│   │   │   ├── StatusBadge.tsx
+│   │   │   ├── CategoryBadge.tsx
+│   │   │   ├── AttachmentPreviewModal.tsx
+│   │   │   └── EmailPreviewModal.tsx
+│   │   ├── pages/               # Page components
+│   │   │   ├── Dashboard.tsx
+│   │   │   ├── CaseDetail.tsx
+│   │   │   └── ProcessEmails.tsx
+│   │   ├── hooks/               # React Query hooks
+│   │   │   ├── useCases.ts
+│   │   │   └── useEmails.ts
+│   │   ├── api/                 # API client
+│   │   │   └── client.ts
+│   │   ├── utils/               # Utility functions
+│   │   │   └── dateUtils.ts     # Timezone-safe date formatting
+│   │   ├── types/               # TypeScript types
+│   │   │   └── index.ts
+│   │   ├── App.tsx
+│   │   └── main.tsx
+│   ├── package.json
+│   ├── vite.config.ts
+│   └── tailwind.config.js
+├── docker-compose.yml
+├── .env.example
+└── README.md
 ```
 
 ## Data Models
@@ -260,11 +324,41 @@ Source records that link to cases:
 Email attachments with categorization and storage:
 - Links to both email (source) and case (for efficient querying)
 - `category`: medical_records | declaration | cover_letter | other
-- `content_preview`: First 500 characters
+- `content_preview`: First 500 characters (viewable in frontend modal)
 - **Storage fields** (for S3/cloud integration):
   - `file_path`: Cloud storage path (e.g., "s3://bucket/cases/NF-39281/file.pdf")
   - `file_size`: File size in bytes
   - `storage_provider`: Storage backend (s3, azure, local, etc.)
+
+## Frontend Features
+
+### Dashboard
+- **Case Grid View**: Cards showing key information
+- **Search**: Filter cases by patient name or case number
+- **Status Filter**: Filter by pending/confirmed/completed
+- **Confidence Filter**: Show only high-confidence cases (≥0.8)
+- **Stats Overview**: Total cases, pending, high confidence count
+
+### Case Detail Page
+- **Full Case Information**: All extracted fields
+- **Edit Mode**: Update status (pending → confirmed → completed) and notes
+- **Related Emails Section**: View all emails linked to the case
+- **Attachments Section**: Browse and preview attachments
+- **Email Preview Modal**: Click any email to view full content, metadata, and processing status
+- **Attachment Preview Modal**: Click any attachment to view content preview (first 500 chars)
+- **Confidence Badge**: Color-coded (green ≥0.8, yellow ≥0.5, red <0.5)
+- **Timestamps**: Created and updated dates
+
+### Process Emails Page
+- **Batch Processing**: Process all sample emails with one click
+- **Results Display**: Shows processed count, failed count, and individual email results
+- **Error Details**: View specific errors for failed emails
+
+### UI Components
+- **Color-Coded Badges**: Visual indicators for status, confidence, and categories
+- **Responsive Design**: Works on desktop and mobile
+- **Professional Theme**: Blue/gray color scheme
+- **Sidebar Navigation**: Easy access to all pages
 
 ## LLM Extraction
 
@@ -286,6 +380,39 @@ The system uses OpenAI's GPT-4o with structured output (function calling) to ext
 - `≥ 0.8`: High confidence - auto-process
 - `0.5 - 0.8`: Medium confidence - flag for review
 - `< 0.5`: Low confidence - requires manual review
+
+### Intelligent Case Updates
+
+When processing multiple emails for the same case:
+
+**Option 3: High Confidence Auto-Update**
+- If new extraction has **higher confidence** than existing case → automatically update ALL fields
+- Logs: `"AUTO-UPDATED: Higher confidence extraction (0.95 > 0.85)"`
+
+**Option 4: Low Confidence Manual Review**
+- If new extraction has **lower/equal confidence** → only fill empty fields
+- Detects conflicts and flags in notes: `"⚠️ MANUAL REVIEW NEEDED (Low confidence: 0.75)"`
+- Lists all conflicts: `"Exam Date: 2025-03-18 -> 2025-03-22"`
+
+### Missing Critical Fields Validation
+
+Automatically flags cases missing critical information:
+
+**Critical Fields:**
+- Exam Date
+- Exam Location
+- Report Due Date
+- Exam Time (semi-critical)
+
+**Auto-Generated Note:**
+```
+🔔 FOLLOW-UP REQUIRED
+Missing critical information:
+  - Exam Date
+  - Report Due Date
+
+Action needed: Contact referring party to obtain missing details.
+```
 
 ## Database Design & Optimization
 
@@ -331,31 +458,40 @@ With indexes, queries scale from **O(n)** to **O(log n)**:
 ### Create New Migration
 
 ```bash
+cd backend
 alembic revision --autogenerate -m "description of changes"
 ```
 
 ### Apply Migrations
 
 ```bash
+cd backend
 alembic upgrade head
 ```
 
 ### Rollback Migration
 
 ```bash
+cd backend
 alembic downgrade -1
 ```
 
-### Reset Database
+### Clear Database (Keep Schema)
 
 ```bash
-# Stop containers
-docker compose down -v
+# Quick truncate (keeps tables)
+docker compose exec postgres psql -U postgres -d triage -c "TRUNCATE cases, emails, attachments CASCADE;"
+```
 
-# Restart
-docker compose up -d
+### Reset Database (Clean Slate)
+
+```bash
+# Drop and recreate database
+docker compose exec postgres psql -U postgres -c "DROP DATABASE triage;"
+docker compose exec postgres psql -U postgres -c "CREATE DATABASE triage;"
 
 # Reapply migrations
+cd backend
 alembic upgrade head
 ```
 

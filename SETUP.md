@@ -2,20 +2,35 @@
 
 ## What's Been Built
 
-✅ **Complete Backend MVP** with:
+✅ **Complete Full-Stack Application** with:
+
+**Backend:**
 - FastAPI application with auto-generated docs
 - PostgreSQL database integration
 - OpenAI GPT-4o LLM extraction service
-- Email ingestion pipeline with case matching
-- RESTful API endpoints for cases and emails
+- Intelligent email ingestion pipeline with:
+  - Confidence-based case updates
+  - Conflict detection and manual review flagging
+  - Missing critical fields validation
+- RESTful API endpoints for cases, emails, and attachments
 - Database migrations with Alembic
+- Performance-optimized queries with eager loading
 - Comprehensive test suite
 - Docker Compose for local PostgreSQL
 
+**Frontend:**
+- React 18 + TypeScript + Vite
+- TailwindCSS for styling
+- React Query for data fetching
+- Dashboard with search and filters
+- Case detail page with email and attachment previews
+- Email processing interface
+- Color-coded badges and responsive design
+
 ✅ **Three Sample Emails**:
-1. `email_001.json` - Clean, well-structured referral
-2. `email_002.json` - Scheduling update for existing case
-3. `email_003.json` - Messy, unstructured intake
+1. `email_001.json` - Clean referral (Johnathan Doe, NF-39281, Orthopedic)
+2. `email_002.json` - Scheduling confirmation (Jane Smith, 2024-7781)
+3. `email_003.json` - Messy intake (Robert L. Hernandez, RH-99102, Neurology)
 
 ## Next Steps
 
@@ -66,17 +81,41 @@ uvicorn app.main:app --reload --port 8000
 
 Visit http://localhost:8000/docs to see the interactive API documentation.
 
-### 5. Test with Sample Emails
+### 5. Start the Frontend (Optional)
 
+```bash
+# From project root
+cd frontend
+
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+```
+
+Frontend will be available at http://localhost:5173
+
+### 6. Test with Sample Emails
+
+**Option 1: Using the Frontend** (Recommended)
+1. Visit http://localhost:5173/process
+2. Click "Process Sample Emails"
+3. View results and navigate to dashboard
+
+**Option 2: Using cURL**
 ```bash
 # Process all sample emails at once
 curl -X POST http://localhost:8000/emails/simulate-batch
 
 # View results
 curl http://localhost:8000/cases/
-
-# Or use the interactive docs at http://localhost:8000/docs
 ```
+
+**Option 3: Using Interactive API Docs**
+- Visit http://localhost:8000/docs
+- Navigate to POST /emails/simulate-batch
+- Click "Try it out" → "Execute"
 
 ## Verify Everything Works
 
@@ -130,15 +169,17 @@ Visit http://localhost:8000/docs for full API documentation with try-it-out func
 - Expected confidence: 0.9+
 - Tests: Complete data extraction
 
-### Email 002 - Scheduling Update
-- Follow-up email for case NF-39281
-- Tests: Case matching, update logic
+### Email 002 - Scheduling Confirmation
+- Jane Smith case (2024-7781)
+- Scheduling confirmation with cover letter
+- Tests: New case creation
 - Expected confidence: 0.85+
 
 ### Email 003 - Messy Intake
-- Informal formatting, ambiguous case number
-- Multiple case number formats (2024-WC-8891 vs WC8891)
-- Tests: Handling uncertainty, extraction robustness
+- Informal formatting ("Hi", "asap", "might be")
+- Ambiguous case number (RH-99102 "or something close to that")
+- Missing critical info (will trigger follow-up flag)
+- Tests: Handling uncertainty, missing fields validation
 - Expected confidence: 0.6-0.8
 
 ## Troubleshooting
@@ -170,29 +211,54 @@ docker compose up -d
 7. **Explore database indexes** - Check query performance in PostgreSQL
 8. **Run tests** - Verify everything works
 
+## Key Features Implemented
+
+### Intelligent Case Updates
+- **High Confidence Auto-Update**: New extractions with higher confidence automatically update all fields
+- **Low Confidence Conflict Detection**: Flags conflicting data for manual review with detailed notes
+- Example: `"⚠️ MANUAL REVIEW NEEDED (Low confidence: 0.75)\nConflicts detected:\n  - Exam Date: 2025-03-18 -> 2025-03-22"`
+
+### Missing Critical Fields Validation
+- Automatically flags cases missing: exam_date, exam_location, report_due_date, exam_time
+- Adds follow-up notes: `"🔔 FOLLOW-UP REQUIRED\nMissing critical information:\n  - Exam Date\n  - Report Due Date"`
+
+### Frontend Features
+- **Dashboard**: Search, filter by status/confidence, stats overview
+- **Case Detail**: Edit status/notes, view related emails and attachments
+- **Email Preview Modal**: Click emails to view full content and processing info
+- **Attachment Preview Modal**: Click attachments to view content preview
+- **Timezone-Safe Dates**: Correctly displays dates without timezone conversion issues
+
+### Data Flexibility
+- **Optional Timestamps**: `received_at` field auto-generates if not provided
+- **Eager Loading**: Efficient queries with `joinedload()` to fetch emails and attachments
+- **Full Response**: Case endpoints return complete data including emails and attachments
+
 ## Architecture Notes
 
-- **Extraction**: Uses OpenAI function calling for structured output
+- **Extraction**: OpenAI function calling for reliable structured output
 - **Case Matching**: Matches on case_number to link multiple emails
 - **Error Handling**: Never loses data, even on extraction failure
 - **Confidence**: 0.8+ auto-process, 0.5-0.8 review, <0.5 manual
-- **Database**: PostgreSQL with proper foreign keys and performance indexes
-- **Normalization**: 3NF with strategic denormalization (attachments link to both email and case)
-- **Storage Ready**: File storage fields prepared for S3/cloud integration
+- **Database**: PostgreSQL with foreign keys and performance indexes (10+ indexes)
+- **Normalization**: 3NF with strategic denormalization
+- **Storage Ready**: S3/cloud file storage fields prepared
+- **Frontend**: React Query for caching, TailwindCSS for styling
 
-## Next Features (Not Implemented - Future Work)
+## Future Enhancements (Not Implemented)
 
-- [ ] Frontend UI (React + TypeScript)
 - [ ] S3/cloud file upload and storage (fields ready)
-- [ ] Email webhook integration
-- [ ] Background job processing (Celery)
-- [ ] User authentication
-- [ ] Audit logging
-- [ ] Export functionality
+- [ ] Email webhook integration (Gmail, Outlook)
+- [ ] Background job processing (Celery/RQ)
+- [ ] User authentication and authorization
+- [ ] Audit logging and change history
+- [ ] Export functionality (PDF, CSV)
 - [ ] Full-text search on email content
+- [ ] Email deduplication
+- [ ] Calendar integration for exam scheduling
 
 ---
 
-**MVP Status**: ✅ Complete and functional
+**Status**: ✅ Complete Full-Stack Application
 
-See README.md for full documentation.
+See README.md for detailed documentation.
