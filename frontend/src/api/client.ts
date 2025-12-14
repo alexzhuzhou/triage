@@ -1,0 +1,63 @@
+import axios from 'axios';
+import type { Case, Email, Attachment, CaseFilters, BatchProcessResult } from '../types';
+
+const API_BASE_URL = '/api';
+
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+export const casesApi = {
+  getAll: async (filters?: CaseFilters) => {
+    const params = new URLSearchParams();
+    if (filters?.status) params.append('status', filters.status);
+    if (filters?.exam_type) params.append('exam_type', filters.exam_type);
+    if (filters?.min_confidence !== undefined) {
+      params.append('min_confidence', filters.min_confidence.toString());
+    }
+
+    const { data } = await apiClient.get<Case[]>(`/cases/?${params.toString()}`);
+    return data;
+  },
+
+  getById: async (id: string) => {
+    const { data } = await apiClient.get<Case>(`/cases/${id}`);
+    return data;
+  },
+
+  update: async (id: string, updates: Partial<Case>) => {
+    const { data } = await apiClient.patch<Case>(`/cases/${id}`, updates);
+    return data;
+  },
+};
+
+export const emailsApi = {
+  processBatch: async () => {
+    const { data } = await apiClient.post<BatchProcessResult>('/emails/simulate-batch');
+    return data;
+  },
+
+  getById: async (id: string) => {
+    const { data } = await apiClient.get<Email>(`/emails/${id}`);
+    return data;
+  },
+};
+
+export const attachmentsApi = {
+  getAll: async (category?: string, caseId?: string) => {
+    const params = new URLSearchParams();
+    if (category) params.append('category', category);
+    if (caseId) params.append('case_id', caseId);
+
+    const { data } = await apiClient.get<Attachment[]>(`/attachments/?${params.toString()}`);
+    return data;
+  },
+
+  getByCase: async (caseId: string) => {
+    const { data } = await apiClient.get<Attachment[]>(`/attachments/case/${caseId}/attachments`);
+    return data;
+  },
+};

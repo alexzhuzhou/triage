@@ -4,7 +4,7 @@ Case API endpoints.
 from typing import List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.database import get_db
 from app.models.case import Case
@@ -56,7 +56,10 @@ def get_case(case_id: UUID, db: Session = Depends(get_db)):
     """
     Get full case details by ID, including emails and attachments.
     """
-    case = db.query(Case).filter(Case.id == case_id).first()
+    case = db.query(Case).options(
+        joinedload(Case.emails),
+        joinedload(Case.attachments)
+    ).filter(Case.id == case_id).first()
 
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
@@ -94,7 +97,10 @@ def get_case_by_number(case_number: str, db: Session = Depends(get_db)):
     """
     Get case by case number (e.g., NF-39281).
     """
-    case = db.query(Case).filter(Case.case_number == case_number).first()
+    case = db.query(Case).options(
+        joinedload(Case.emails),
+        joinedload(Case.attachments)
+    ).filter(Case.case_number == case_number).first()
 
     if not case:
         raise HTTPException(status_code=404, detail=f"Case {case_number} not found")

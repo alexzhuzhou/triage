@@ -49,6 +49,7 @@ class AttachmentResponse(BaseModel):
     content_type: Optional[str]
     category: str
     category_reason: Optional[str]
+    content_preview: Optional[str] = None
     file_path: Optional[str] = None
     file_size: Optional[int] = None
     storage_provider: Optional[str] = None
@@ -64,6 +65,12 @@ class CaseResponse(CaseBase):
     created_at: datetime
     updated_at: datetime
     attachments: List[AttachmentResponse] = []
+    emails: List["EmailResponse"] = []
 
     class Config:
         from_attributes = True
+
+
+# Import here to avoid circular dependency
+from .email import EmailResponse
+CaseResponse.model_rebuild()
