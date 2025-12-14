@@ -2,12 +2,16 @@
 
 ## What's Been Built
 
-✅ **Complete Full-Stack Application** with:
+**Complete Full-Stack Application** with:
 
 **Backend:**
 - FastAPI application with auto-generated docs
 - PostgreSQL database integration
 - OpenAI GPT-4o LLM extraction service
+- **Real Email Integration** (IMAP - Gmail/Outlook):
+  - Automatic background polling (every 60s)
+  - Manual on-demand email fetching
+  - Email parsing and format conversion
 - Intelligent email ingestion pipeline with:
   - Confidence-based case updates
   - Conflict detection and manual review flagging
@@ -27,10 +31,17 @@
 - Email processing interface
 - Color-coded badges and responsive design
 
-✅ **Three Sample Emails**:
+ **Ten Sample Emails** (diverse scenarios for testing):
 1. `email_001.json` - Clean referral (Johnathan Doe, NF-39281, Orthopedic)
 2. `email_002.json` - Scheduling confirmation (Jane Smith, 2024-7781)
 3. `email_003.json` - Messy intake (Robert L. Hernandez, RH-99102, Neurology)
+4. `email_004.json` - Psychiatric case (Sarah Martinez, WC-2025-4432)
+5. `email_005.json` - Additional docs for existing case (NF-39281)
+6. `email_006.json` - Super messy outlier (Michael Thompson, missing info)
+7. `email_007.json` - Urgent with missing info (David Kim, tests validation)
+8. `email_008.json` - Schedule change/conflict (Jane Smith, tests conflict detection)
+9. `email_009.json` - Clean cardiology case (Angela Chen, CA-2025-1189)
+10. `email_010.json` - Extreme outlier forwarded mess (Patricia Rodriguez)
 
 ## Next Steps
 
@@ -40,9 +51,16 @@
 # Create .env file from template
 cp .env.example .env
 
-# Edit .env and add your OpenAI API key
+# Edit .env and add your API key
 # Required: OPENAI_API_KEY=sk-...
+
+# Optional: Configure email integration
+# EMAIL_ENABLED=true
+# EMAIL_ADDRESS=your-email@gmail.com
+# EMAIL_PASSWORD=your-app-password
 ```
+
+**For email integration setup, see [EMAIL_INTEGRATION.md](EMAIL_INTEGRATION.md)**
 
 ### 2. Start Database
 
@@ -147,6 +165,10 @@ tests/test_api.py::test_list_cases_empty PASSED
 - `POST /emails/simulate-batch` - Process all sample emails
 - `POST /emails/ingest` - Process individual email
 
+### Email Polling
+- `POST /email-polling/manual-poll` - Manually trigger email fetching from Gmail/Outlook
+- `GET /email-polling/status` - Check email integration configuration
+
 ### Query Cases
 - `GET /cases/` - List all cases
 - `GET /cases/?min_confidence=0.8` - High-confidence cases only
@@ -181,6 +203,38 @@ Visit http://localhost:8000/docs for full API documentation with try-it-out func
 - Missing critical info (will trigger follow-up flag)
 - Tests: Handling uncertainty, missing fields validation
 - Expected confidence: 0.6-0.8
+
+### Email 004 - Psychiatric Case
+- Sarah Martinez, WC-2025-4432
+- Tests: Different exam type (Psychiatric)
+
+### Email 005 - Follow-up for Existing Case
+- Additional documents for NF-39281
+- Tests: Case matching and document_submission intent
+
+### Email 006 - Super Messy Outlier
+- Michael Thompson, poor formatting
+- Missing critical information
+- Tests: Extreme low-confidence handling
+
+### Email 007 - Urgent with Missing Info
+- David Kim, urgent request
+- Missing exam date and location
+- Tests: Missing field validation
+
+### Email 008 - Schedule Change/Conflict
+- Jane Smith case update with new date
+- Tests: Conflict detection system
+
+### Email 009 - Clean Cardiology Case
+- Angela Chen, CA-2025-1189
+- Professional formatting
+- Tests: High-confidence extraction
+
+### Email 010 - Extreme Outlier
+- Patricia Rodriguez, forwarded mess
+- Multiple formatting issues
+- Tests: Worst-case scenario handling
 
 ## Troubleshooting
 
@@ -245,11 +299,20 @@ docker compose up -d
 - **Storage Ready**: S3/cloud file storage fields prepared
 - **Frontend**: React Query for caching, TailwindCSS for styling
 
+## Implemented Features
+
+-  **Email Integration** - IMAP polling (Gmail, Outlook) with background tasks
+-  **Manual Email Polling** - On-demand email fetching via API
+-  **10 Sample Emails** - Comprehensive test coverage
+-  **Intelligent Case Updates** - Confidence-based update strategy
+-  **Conflict Detection** - Flags low-confidence conflicting data
+-  **Missing Field Validation** - Automatic follow-up flagging
+
 ## Future Enhancements (Not Implemented)
 
 - [ ] S3/cloud file upload and storage (fields ready)
-- [ ] Email webhook integration (Gmail, Outlook)
-- [ ] Background job processing (Celery/RQ)
+- [ ] Email webhook integration for real-time processing
+- [ ] Background job processing (Celery/RQ) for heavy workloads
 - [ ] User authentication and authorization
 - [ ] Audit logging and change history
 - [ ] Export functionality (PDF, CSV)
@@ -259,6 +322,5 @@ docker compose up -d
 
 ---
 
-**Status**: ✅ Complete Full-Stack Application
 
 See README.md for detailed documentation.

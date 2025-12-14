@@ -16,6 +16,15 @@ class Settings(BaseSettings):
     # Environment
     ENV: str = "development"
 
+    # Email Integration (Optional)
+    EMAIL_ENABLED: bool = False
+    EMAIL_IMAP_SERVER: str = "imap.gmail.com"
+    EMAIL_ADDRESS: str = ""
+    EMAIL_PASSWORD: str = ""
+    EMAIL_PORT: int = 993
+    EMAIL_USE_SSL: bool = True
+    EMAIL_POLL_INTERVAL: int = 60  # seconds
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

@@ -1,11 +1,32 @@
 """
 FastAPI application entry point.
 """
+import asyncio
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import emails, cases, attachments
+from app.routers import emails, cases, attachments, email_polling
 from app.config import settings
+from app.services.email_poller import email_poller
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Application lifespan manager.
+    Starts background tasks on startup and stops them on shutdown.
+    """
+    # Startup
+    if settings.EMAIL_ENABLED:
+        # Start email polling in background
+        asyncio.create_task(email_poller.start())
+
+    yield
+
+    # Shutdown
+    if settings.EMAIL_ENABLED:
+        email_poller.stop()
 
 # Create FastAPI app
 app = FastAPI(
@@ -13,7 +34,8 @@ app = FastAPI(
     description="Backend service for processing IME referral emails with LLM extraction",
     version="1.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=lifespan
 )
 
 # CORS middleware for frontend integration
@@ -29,6 +51,7 @@ app.add_middleware(
 app.include_router(emails.router)
 app.include_router(cases.router)
 app.include_router(attachments.router)
+app.include_router(email_polling.router)
 
 
 @app.get("/")
@@ -42,8 +65,10 @@ def root():
         "endpoints": {
             "emails": "/emails",
             "cases": "/cases",
-            "attachments": "/attachments"
-        }
+            "attachments": "/attachments",
+            "email_polling": "/email-polling"
+        },
+        "email_polling_enabled": settings.EMAIL_ENABLED
     }
 
 

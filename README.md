@@ -6,9 +6,17 @@ Full-stack application that processes inbound emails for Independent Medical Exa
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  Email Ingest   │────▶│   FastAPI       │────▶│   PostgreSQL    │
-│  (Simulated)    │     │   Backend       │     │   Database      │
+│ Gmail/Outlook   │────▶│  IMAP Fetcher   │     │   PostgreSQL    │
+│ (Real Emails)   │     │  + Parser       │     │   Database      │
 └─────────────────┘     └────────┬────────┘     └─────────────────┘
+         OR                      │                       ▲
+┌─────────────────┐              │                       │
+│  Sample Emails  │──────────────┤                       │
+│  (JSON Files)   │              ▼                       │
+└─────────────────┘     ┌─────────────────┐              │
+                        │   FastAPI       │──────────────┘
+                        │   Backend       │
+                        └────────┬────────┘
                                  │
                                  ▼
                         ┌─────────────────┐
@@ -28,6 +36,7 @@ Full-stack application that processes inbound emails for Independent Medical Exa
 - **Backend**: FastAPI (Python 3.11+)
 - **Database**: PostgreSQL 15 + SQLAlchemy + Alembic
 - **LLM**: OpenAI GPT-4o for structured data extraction
+- **Email Integration**: IMAP (Gmail, Outlook) with background polling
 - **Frontend**: React 18 + TypeScript + Vite
 - **Styling**: TailwindCSS
 - **State Management**: React Query (@tanstack/react-query)
@@ -48,11 +57,19 @@ Full-stack application that processes inbound emails for Independent Medical Exa
 cd Triage
 
 # Copy environment template
+cd backend
 cp .env.example .env
 
-# Edit .env and add your OpenAI API key
+# Edit .env and add your credentials
 # OPENAI_API_KEY=sk-...
+
+# Optional: Enable real email integration
+# EMAIL_ENABLED=true
+# EMAIL_ADDRESS=your-email@gmail.com
+# EMAIL_PASSWORD=your-app-password
 ```
+
+**For Email Integration (Optional):** See [EMAIL_INTEGRATION.md](EMAIL_INTEGRATION.md) for detailed setup instructions.
 
 ### 3. Start PostgreSQL
 
@@ -121,19 +138,51 @@ The frontend will be available at:
 
 ### Process Sample Emails
 
-The project includes 3 sample email files in `backend/sample_emails/`:
+The project includes **10 sample email files** in `backend/sample_emails/`:
 
-1. **email_001.json** - Clean referral (Johnathan Doe, NF-39281, Orthopedic)
+**Clean & Professional:**
+1. **email_001.json** - Orthopedic referral (Johnathan Doe, NF-39281)
 2. **email_002.json** - Scheduling confirmation (Jane Smith, 2024-7781)
-3. **email_003.json** - Messy intake (Robert L. Hernandez, RH-99102, Neurology)
+3. **email_004.json** - Psychiatric evaluation (Sarah Martinez, WC-2025-4432)
+4. **email_009.json** - Cardiology IME (Angela Chen, CV-2025-9943)
 
-Process them all at once:
+**Follow-ups & Updates:**
+5. **email_005.json** - Additional documents for existing case (NF-39281)
+6. **email_008.json** - Schedule change with conflicts (2024-7781)
 
+**Messy & Edge Cases:**
+7. **email_003.json** - Informal intake (Robert L. Hernandez, RH-99102)
+8. **email_006.json** - Very messy, uncertain data (Michael Thompson)
+9. **email_007.json** - Urgent with missing info (David Kim, WC-2025-1156)
+10. **email_010.json** - Extreme outlier, forwarded mess (Patricia Rodriguez)
+
+**Process all samples:**
 ```bash
 curl -X POST http://localhost:8000/emails/simulate-batch
 ```
 
 Or via the interactive docs at http://localhost:8000/docs, or using the frontend at http://localhost:5173/process
+
+### Process Real Emails (Optional)
+
+**Enable email integration** to automatically process real emails from Gmail/Outlook:
+
+```bash
+# Set in .env
+EMAIL_ENABLED=true
+EMAIL_ADDRESS=your-email@gmail.com
+EMAIL_PASSWORD=your-app-password
+
+# Restart server - emails auto-process every 60 seconds
+uvicorn app.main:app --reload
+```
+
+**Or trigger manually:**
+```bash
+curl -X POST http://localhost:8000/email-polling/manual-poll
+```
+
+See [EMAIL_INTEGRATION.md](EMAIL_INTEGRATION.md) for setup guide.
 
 ### Ingest Individual Email
 
@@ -224,6 +273,11 @@ curl http://localhost:8000/attachments/by-category/medical_records
 - `GET /attachments/by-category/{category}` - Filter by category (medical_records, declaration, cover_letter, other)
 - `GET /attachments/case/{case_id}/attachments` - Get all attachments for a specific case
 
+### Email Polling
+
+- `POST /email-polling/manual-poll` - Manually trigger email fetching and processing
+- `GET /email-polling/status` - Get current email configuration status
+
 ## Running Tests
 
 ```bash
@@ -258,11 +312,15 @@ triage/
 │   │   │   └── extraction.py    # LLM extraction schema
 │   │   ├── services/            # Business logic
 │   │   │   ├── extraction.py    # OpenAI integration
-│   │   │   └── ingestion.py     # Email processing pipeline
+│   │   │   ├── ingestion.py     # Email processing pipeline
+│   │   │   ├── email_fetcher.py # IMAP email fetching
+│   │   │   ├── email_parser.py  # Email format adapter
+│   │   │   └── email_poller.py  # Background email polling
 │   │   └── routers/             # API endpoints
 │   │       ├── cases.py
 │   │       ├── emails.py
-│   │       └── attachments.py
+│   │       ├── attachments.py
+│   │       └── email_polling.py
 │   ├── sample_emails/           # Sample email JSON files
 │   ├── tests/                   # Test suite
 │   ├── alembic/                 # Database migrations
@@ -298,6 +356,7 @@ triage/
 │   └── tailwind.config.js
 ├── docker-compose.yml
 ├── .env.example
+├── EMAIL_INTEGRATION.md      # Email integration setup guide
 └── README.md
 ```
 
@@ -547,6 +606,25 @@ docker compose restart postgres
 - Check API key has sufficient credits
 - Review error messages in email `error_message` field
 
+### Email Integration Issues
+
+**Email polling not starting:**
+- Check `EMAIL_ENABLED=true` in `.env`
+- Verify all email credentials are configured
+- Check logs for startup messages
+
+**Authentication failed:**
+- Ensure 2FA is enabled on Gmail
+- Regenerate app password (no spaces)
+- Verify `EMAIL_PASSWORD` is correct in `.env`
+
+**No emails found:**
+- Check if you have unread emails in inbox
+- Verify `EMAIL_ADDRESS` is correct
+- Test manual poll: `curl -X POST http://localhost:8000/email-polling/manual-poll`
+
+**For detailed setup instructions, see [EMAIL_INTEGRATION.md](EMAIL_INTEGRATION.md)**
+
 ### Migration Issues
 
 ```bash
@@ -557,16 +635,3 @@ alembic current
 alembic history
 ```
 
-## Contributing
-
-This is a take-home assignment demonstrating:
-- ✅ Data modeling for messy real-world inputs
-- ✅ Responsible, predictable LLM usage with structured output
-- ✅ Pragmatic full-stack implementation
-- ✅ Error handling and data preservation
-- ✅ API design and documentation
-- ✅ Testing practices
-
-## License
-
-Proprietary - Brighterway Take-Home Assignment
