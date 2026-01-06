@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import emails, cases, attachments, email_polling
+from app.routers import emails, cases, attachments, email_polling, queue
 from app.config import settings
 from app.services.email_poller import email_poller
 
@@ -52,6 +52,7 @@ app.include_router(emails.router)
 app.include_router(cases.router)
 app.include_router(attachments.router)
 app.include_router(email_polling.router)
+app.include_router(queue.router)
 
 
 @app.get("/")
@@ -66,7 +67,8 @@ def root():
             "emails": "/emails",
             "cases": "/cases",
             "attachments": "/attachments",
-            "email_polling": "/email-polling"
+            "email_polling": "/email-polling",
+            "queue": "/queue"
         },
         "email_polling_enabled": settings.EMAIL_ENABLED
     }

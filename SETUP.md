@@ -62,14 +62,15 @@ cp .env.example .env
 
 **For email integration setup, see [EMAIL_INTEGRATION.md](EMAIL_INTEGRATION.md)**
 
-### 2. Start Database
+### 2. Start Database and Redis
 
 ```bash
 # From project root
 docker compose up -d
 
-# Verify running
+# Verify both PostgreSQL and Redis are running
 docker compose ps
+# Should show: triage-postgres and triage-redis
 ```
 
 ### 3. Install Dependencies & Run Migrations
@@ -93,13 +94,34 @@ alembic upgrade head
 ### 4. Start the API
 
 ```bash
-# From backend directory
+# From backend directory (Terminal 1)
 uvicorn app.main:app --reload --port 8000
 ```
 
 Visit http://localhost:8000/docs to see the interactive API documentation.
 
-### 5. Start the Frontend (Optional)
+### 5. Start the Background Worker
+
+**IMPORTANT**: The worker is required for processing emails. Without it, emails will be queued but not processed.
+
+```bash
+# Open a NEW terminal window (Terminal 2)
+cd backend
+venv\Scripts\activate  # Windows
+# OR: source venv/bin/activate  # macOS/Linux
+
+# Start the worker
+python -m app.worker
+```
+
+You should see:
+```
+[INFO] Starting RQ worker...
+[INFO] Detected Windows - using WindowsWorker from rq-win  # On Windows
+[INFO] Worker ready. Waiting for jobs...
+```
+
+### 6. Start the Frontend (Optional)
 
 ```bash
 # From project root
@@ -114,7 +136,7 @@ npm run dev
 
 Frontend will be available at http://localhost:5173
 
-### 6. Test with Sample Emails
+### 7. Test with Sample Emails
 
 **Option 1: Using the Frontend** (Recommended)
 1. Visit http://localhost:5173/process
@@ -141,6 +163,32 @@ curl http://localhost:8000/cases/
 
 ```bash
 curl http://localhost:8000/health
+```
+
+### Monitor Queue Status
+
+```bash
+# Check queue statistics (jobs queued, started, finished, failed)
+curl http://localhost:8000/queue/status
+
+# Check queue health (Redis connectivity, worker availability)
+curl http://localhost:8000/queue/health
+```
+
+You should see output like:
+```json
+{
+  "redis_connected": true,
+  "queues": {
+    "default": {
+      "queued": 0,
+      "started": 0,
+      "finished": 10,
+      "failed": 0,
+      "workers": 1
+    }
+  }
+}
 ```
 
 ### Run Tests
@@ -180,6 +228,12 @@ tests/test_api.py::test_list_cases_empty PASSED
 - `GET /attachments/?category=medical_records` - Filter by category
 - `GET /attachments/case/{case_id}/attachments` - All attachments for a case
 - `GET /attachments/by-category/medical_records` - Get medical records only
+
+### Queue Monitoring
+- `GET /queue/status` - Get queue statistics for all queues
+- `GET /queue/stats/default` - Get stats for specific queue
+- `GET /queue/jobs/{job_id}` - Get job status and details
+- `GET /queue/health` - Check Redis connectivity and worker availability
 
 ### Interactive Docs
 Visit http://localhost:8000/docs for full API documentation with try-it-out functionality.

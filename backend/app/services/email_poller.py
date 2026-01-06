@@ -8,10 +8,9 @@ import logging
 from typing import Dict, Any
 
 from app.config import settings
-from app.database import SessionLocal
 from app.services.email_fetcher import EmailFetcher
 from app.services.email_parser import EmailParser
-from app.services.ingestion import process_email
+from app.services.queue import enqueue_email_processing
 
 logger = logging.getLogger(__name__)
 
@@ -83,39 +82,33 @@ class EmailPoller:
                 logger.info("No new emails found")
                 return results
 
-            logger.info(f"Processing {len(email_messages)} email(s)")
+            logger.info(f"Enqueueing {len(email_messages)} email(s) for processing")
 
-            # Process each email
-            db = SessionLocal()
-            try:
-                for email_message in email_messages:
-                    try:
-                        # Parse email to our schema
-                        email_data = EmailParser.parse_to_ingest(email_message)
+            # Enqueue each email for async processing
+            for email_message in email_messages:
+                try:
+                    # Parse email to our schema
+                    email_data = EmailParser.parse_to_ingest(email_message)
 
-                        # Process through ingestion pipeline
-                        processed_email = process_email(db, email_data)
+                    # Enqueue for background processing (with retry logic)
+                    job = enqueue_email_processing(email_data, high_priority=False)
 
-                        results["processed"] += 1
-                        results["emails"].append({
-                            "subject": email_data.subject,
-                            "email_id": str(processed_email.id),
-                            "case_id": str(processed_email.case_id) if processed_email.case_id else None,
-                            "status": processed_email.processing_status.value
-                        })
+                    results["processed"] += 1
+                    results["emails"].append({
+                        "subject": email_data.subject,
+                        "job_id": job.id,
+                        "status": "queued"
+                    })
 
-                        logger.info(f"Successfully processed email: {email_data.subject[:50]}")
+                    logger.info(f"Enqueued email for processing: {email_data.subject[:50]} (Job: {job.id})")
 
-                    except Exception as e:
-                        results["failed"] += 1
-                        results["emails"].append({
-                            "subject": email_data.subject if 'email_data' in locals() else "Unknown",
-                            "error": str(e)
-                        })
-                        logger.error(f"Failed to process email: {e}")
-
-            finally:
-                db.close()
+                except Exception as e:
+                    results["failed"] += 1
+                    results["emails"].append({
+                        "subject": email_data.subject if 'email_data' in locals() else "Unknown",
+                        "error": str(e)
+                    })
+                    logger.error(f"Failed to enqueue email: {e}")
 
         except Exception as e:
             logger.error(f"Error during email polling: {e}")

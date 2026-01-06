@@ -10,6 +10,7 @@ Full-stack application that processes inbound emails for Independent Medical Exa
 
 - **Backend**: FastAPI (Python 3.11+)
 - **Database**: PostgreSQL 15 + SQLAlchemy + Alembic
+- **Queue**: Redis + RQ (Redis Queue) for reliable background job processing
 - **LLM**: OpenAI GPT-4o for structured data extraction
 - **Email Integration**: IMAP (Gmail, Outlook) with background polling
 - **Frontend**: React 18 + TypeScript + Vite
@@ -46,14 +47,15 @@ cp .env.example .env
 
 **For Email Integration (Optional):** See [EMAIL_INTEGRATION.md](EMAIL_INTEGRATION.md) for detailed setup instructions.
 
-### 3. Start PostgreSQL
+### 3. Start PostgreSQL and Redis
 
 ```bash
-# Start PostgreSQL container
+# Start PostgreSQL and Redis containers
 docker compose up -d
 
-# Verify it's running
+# Verify they're running
 docker compose ps
+# Should show both triage-postgres and triage-redis running
 ```
 
 ### 4. Install Python Dependencies
@@ -84,7 +86,7 @@ alembic upgrade head
 ### 6. Start the API Server
 
 ```bash
-# Run the FastAPI application
+# Run the FastAPI application (Terminal 1)
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -93,7 +95,30 @@ The API will be available at:
 - **Interactive Docs**: http://localhost:8000/docs
 - **Alternative Docs**: http://localhost:8000/redoc
 
-### 7. Start the Frontend (Optional)
+### 7. Start the Background Worker
+
+**IMPORTANT**: The worker is required for processing emails. Without it, emails will be queued but not processed.
+
+```bash
+# In a NEW terminal window (Terminal 2)
+cd backend
+venv\Scripts\activate  # On Windows
+# OR: source venv/bin/activate  # On macOS/Linux
+
+# Start the worker
+python -m app.worker
+```
+
+The worker will:
+- Process queued email jobs with automatic retries (5 attempts)
+- Handle LLM extraction failures gracefully
+- Use exponential backoff (1s, 2s, 4s, 8s, 16s)
+
+**Windows Users**: The worker uses `rq-win` for Windows compatibility (installed automatically via requirements.txt).
+
+**Linux/macOS Users**: The worker uses standard RQ with process forking.
+
+### 8. Start the Frontend (Optional)
 
 ```bash
 cd frontend
@@ -252,6 +277,13 @@ curl http://localhost:8000/attachments/by-category/medical_records
 
 - `POST /email-polling/manual-poll` - Manually trigger email fetching and processing
 - `GET /email-polling/status` - Get current email configuration status
+
+### Queue & Monitoring
+
+- `GET /queue/status` - Get status and statistics for all queues (queued, started, finished, failed counts)
+- `GET /queue/stats/{queue_name}` - Get detailed statistics for a specific queue (default, high, low)
+- `GET /queue/jobs/{job_id}` - Get details and status of a specific job
+- `GET /queue/health` - Health check for queue system (Redis connectivity, worker availability)
 
 ## Running Tests
 
@@ -448,6 +480,55 @@ Missing critical information:
 Action needed: Contact referring party to obtain missing details.
 ```
 
+## Queue System & Reliability
+
+The system uses **Redis Queue (RQ)** for reliable, asynchronous email processing with automatic retries:
+
+### Architecture
+
+```
+Email Entry → Redis Queue → Worker Process → LLM Extraction → Database
+     ↓              ↓               ↓
+  Job ID      Persistent      Auto-Retry on Failure
+              Storage         (5 attempts, exponential backoff)
+```
+
+### Key Features
+
+**Automatic Retries**:
+- Failed jobs retry automatically up to 5 times
+- Exponential backoff: 1s, 2s, 4s, 8s, 16s between attempts
+- Handles transient failures (OpenAI API timeouts, rate limits)
+
+**Graceful Degradation**:
+- If Redis is unavailable, API falls back to synchronous processing
+- System remains available even if queue is down
+- No data loss in either mode
+
+**Queue Management**:
+- Three priority queues: `high`, `default`, `low`
+- Background worker processes jobs sequentially (Windows) or in parallel (Linux)
+- Monitor queue health via `/queue/status` endpoint
+
+**Windows Compatibility**:
+- Uses `rq-win` package for Windows development
+- Automatically detected and configured
+- For production, use Linux or Docker containers
+
+**Job Monitoring**:
+- Track job status: `queued`, `started`, `finished`, `failed`
+- View job details and results via `/queue/jobs/{job_id}`
+- Failed jobs moved to failed registry for inspection
+
+### Email Processing Paths
+
+All email entry points use the queue system:
+
+1. **API Endpoint** (`POST /emails/ingest`): Enqueues job, waits for result
+2. **Batch Processing** (`POST /emails/simulate-batch`): Enqueues all 10 sample emails
+3. **Manual Polling** (`POST /email-polling/manual-poll`): Enqueues fetched emails
+4. **Background Polling**: Auto-polls every 60s, enqueues new emails
+
 ## Database Design & Optimization
 ### Schema
 ![Database Diagram](docs/Databse.png)
@@ -601,6 +682,48 @@ docker compose restart postgres
 - Test manual poll: `curl -X POST http://localhost:8000/email-polling/manual-poll`
 
 **For detailed setup instructions, see [EMAIL_INTEGRATION.md](EMAIL_INTEGRATION.md)**
+
+### Queue & Worker Issues
+
+**Worker not processing jobs:**
+```bash
+# Check if worker is running
+# You should see logs like: "Worker ready. Waiting for jobs..."
+
+# Check queue status
+curl http://localhost:8000/queue/status
+
+# Should show workers: 1 for each queue
+```
+
+**Redis connection errors:**
+```bash
+# Check if Redis is running
+docker compose ps
+
+# View Redis logs
+docker compose logs redis
+
+# Restart Redis
+docker compose restart redis
+
+# Clear Redis queue data (if needed)
+docker compose exec redis redis-cli FLUSHDB
+```
+
+**Worker fails with "module 'os' has no attribute 'fork'" on Windows:**
+- This is normal! The system automatically uses `rq-win` on Windows
+- Make sure `rq-win` is installed: `pip install rq-win`
+- Restart the worker
+
+**Jobs stuck in "started" state:**
+- On Windows, worker processes jobs sequentially (one at a time)
+- Check worker logs for errors
+- Jobs may be processing slowly due to OpenAI API calls (each takes 2-5 seconds)
+
+**"No workers available" warning:**
+- Make sure the worker is running in a separate terminal: `python -m app.worker`
+- Check that the worker didn't crash (view terminal logs)
 
 ### Migration Issues
 

@@ -126,21 +126,42 @@ def test_process_email_matches_existing_case(db, sample_email_data, monkeypatch)
     # Verify it matched the existing case
     assert email.case_id == initial_case_id
 
+    # Refresh the case from database to get updated values
+    db.refresh(initial_case)
+
     # Verify case was updated (higher confidence)
-    case = db.query(Case).filter(Case.id == initial_case_id).first()
-    assert case.extraction_confidence == 0.90
+    assert initial_case.extraction_confidence == 0.90
 
 
 def test_process_email_handles_extraction_failure(db, sample_email_data, monkeypatch):
     """Test that email processing handles extraction failures gracefully."""
-    # Mock the OpenAI extraction to raise an exception
+    # Mock the extraction service to return a fallback response
+    # (The extraction service catches exceptions and returns fallback CaseExtraction)
     from app.services import extraction
+    from app.schemas.extraction import CaseExtraction
 
     def mock_extraction_failure(*args, **kwargs):
-        raise Exception("API Error")
+        # Simulate what extraction.py does when OpenAI fails
+        return CaseExtraction(
+            patient_name="EXTRACTION_FAILED",
+            case_number="UNKNOWN_test@example.com",
+            exam_type="Unknown",
+            attachments=[],
+            confidence=0.0,
+            extraction_notes="Extraction failed: API Error",
+            email_intent="other"
+        )
 
     monkeypatch.setattr(extraction, "extract_case_from_email", mock_extraction_failure)
 
-    # Process the email - should not raise exception
-    with pytest.raises(Exception):
-        email = process_email(db, sample_email_data)
+    # Process the email - should not crash
+    email = process_email(db, sample_email_data)
+
+    # Verify email was saved despite failure
+    assert email is not None
+    assert email.processing_status == EmailProcessingStatus.PROCESSED
+
+    # Verify case was created with failure indicators
+    case = db.query(Case).filter(Case.id == email.case_id).first()
+    assert case.extraction_confidence == 0.0
+    assert case.patient_name == "EXTRACTION_FAILED"

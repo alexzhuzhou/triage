@@ -2,10 +2,53 @@
 Pytest configuration and fixtures.
 """
 import pytest
-from sqlalchemy import create_engine
+import uuid as uuid_module
+from sqlalchemy import create_engine, event, TypeDecorator, CHAR
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from fastapi.testclient import TestClient
 
+
+# Define a platform-independent UUID type before importing models
+class UUID(TypeDecorator):
+    """Platform-independent UUID type for testing."""
+    impl = CHAR
+    cache_ok = True
+
+    def __init__(self, as_uuid=True):
+        """Accept as_uuid parameter for compatibility but always store as UUID."""
+        self.as_uuid = as_uuid
+        super().__init__()
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == 'postgresql':
+            return dialect.type_descriptor(PG_UUID(as_uuid=True))
+        else:
+            return dialect.type_descriptor(CHAR(36))
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return value
+        elif dialect.name == 'postgresql':
+            return value
+        else:
+            if isinstance(value, uuid_module.UUID):
+                return str(value)
+            return value
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return value
+        if isinstance(value, uuid_module.UUID):
+            return value
+        return uuid_module.UUID(value)
+
+
+# Monkey-patch the PostgreSQL UUID to work with SQLite
+import sqlalchemy.dialects.postgresql as postgresql_dialect
+postgresql_dialect.UUID = UUID
+
+# Now import the app components
 from app.database import Base, get_db
 from app.main import app
 
@@ -17,6 +60,14 @@ engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     connect_args={"check_same_thread": False}
 )
+
+# Enable foreign key constraints in SQLite
+@event.listens_for(engine, "connect")
+def set_sqlite_pragma(dbapi_conn, connection_record):
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 

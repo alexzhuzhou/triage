@@ -9,7 +9,7 @@ from app.database import get_db
 from app.config import settings
 from app.services.email_fetcher import EmailFetcher
 from app.services.email_parser import EmailParser
-from app.services.ingestion import process_email
+from app.services.queue import enqueue_email_processing
 
 router = APIRouter(prefix="/email-polling", tags=["email-polling"])
 
@@ -62,21 +62,20 @@ def manual_poll_emails(db: Session = Depends(get_db)):
                 "emails": []
             }
 
-        # Process each email
+        # Enqueue each email for background processing
         for email_message in email_messages:
             try:
                 # Parse email to our schema
                 email_data = EmailParser.parse_to_ingest(email_message)
 
-                # Process through ingestion pipeline
-                processed_email = process_email(db, email_data)
+                # Enqueue for background processing with retry logic
+                job = enqueue_email_processing(email_data, high_priority=False)
 
                 results["processed"] += 1
                 results["emails"].append({
                     "subject": email_data.subject,
-                    "email_id": str(processed_email.id),
-                    "case_id": str(processed_email.case_id) if processed_email.case_id else None,
-                    "status": processed_email.processing_status.value
+                    "job_id": job.id,
+                    "status": "queued"
                 })
 
             except Exception as e:

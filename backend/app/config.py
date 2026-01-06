@@ -25,6 +25,11 @@ class Settings(BaseSettings):
     EMAIL_USE_SSL: bool = True
     EMAIL_POLL_INTERVAL: int = 60  # seconds
 
+    # Redis & Queue
+    REDIS_URL: str = "redis://localhost:6379/0"
+    QUEUE_DEFAULT_TIMEOUT: int = 600  # 10 minutes
+    QUEUE_RETRY_ATTEMPTS: int = 5
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
