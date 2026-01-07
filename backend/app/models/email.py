@@ -48,6 +48,7 @@ class Email(Base):
         nullable=False
     )
     raw_extraction = Column(JSON, nullable=True)  # Full LLM response for debugging
+    raw_email_data = Column(JSON, nullable=True)  # Original email data for retry (only saved on failure)
     error_message = Column(Text, nullable=True)
 
     # Timestamps

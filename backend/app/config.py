@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     QUEUE_DEFAULT_TIMEOUT: int = 600  # 10 minutes
     QUEUE_RETRY_ATTEMPTS: int = 5
 
+    # Testing (for simulating failures)
+    SIMULATE_LLM_FAILURES: bool = True  # Set to True to test retry logic
+    LLM_FAILURE_RATE: float = 0.7  # 0.0-1.0 (70% = fail 70% of the time)
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

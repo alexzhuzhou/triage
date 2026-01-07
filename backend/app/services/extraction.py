@@ -5,6 +5,7 @@ This service extracts structured case data from email content using OpenAI's
 function calling / structured output capabilities.
 """
 import json
+import random
 from typing import Dict, Any
 from openai import OpenAI
 from app.config import settings
@@ -79,6 +80,11 @@ def extract_case_from_email(
     Raises:
         Exception: If OpenAI API call fails (triggers retry in queue)
     """
+
+    # TESTING: Simulate LLM failures to test retry logic
+    if settings.SIMULATE_LLM_FAILURES:
+        if random.random() < settings.LLM_FAILURE_RATE:
+            raise Exception(f"SIMULATED LLM FAILURE: Connection timeout (testing retry mechanism - {int(settings.LLM_FAILURE_RATE * 100)}% failure rate)")
 
     # Build user prompt with email content
     attachment_info = "\n".join([

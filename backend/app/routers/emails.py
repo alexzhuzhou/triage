@@ -9,30 +9,31 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.email import Email
 from app.schemas.email import EmailIngest, EmailResponse, AttachmentData
-from app.services.queue import enqueue_with_sync_fallback, enqueue_email_processing
+from app.services.queue import enqueue_email_processing
 
 router = APIRouter(prefix="/emails", tags=["emails"])
 
 
-@router.post("/ingest", status_code=201)
+@router.post("/ingest", status_code=202)
 def ingest_email(email_data: EmailIngest, db: Session = Depends(get_db)):
     """
     Ingest a new email for processing.
 
-    This endpoint:
-    1. Receives email data
-    2. Enqueues it for background processing with retry logic
-    3. Waits for the result and returns it (synchronous behavior)
-    4. Falls back to direct processing if Redis is unavailable
+    This endpoint enqueues the email for background processing with automatic
+    retry logic for transient failures (OpenAI API timeouts, rate limits, etc.).
 
-    The email is processed through the queue with automatic retries for
-    transient failures (OpenAI API timeouts, rate limits, etc.).
+    Returns immediately with job ID for tracking.
     """
     try:
-        result = enqueue_with_sync_fallback(email_data)
-        return result
+        job = enqueue_email_processing(email_data)
+        return {
+            "job_id": job.id,
+            "status": "queued",
+            "subject": email_data.subject,
+            "message": "Email queued for processing"
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to process email: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to enqueue email: {str(e)}")
 
 
 @router.post("/simulate-batch")
@@ -50,7 +51,7 @@ def simulate_batch_ingestion(db: Session = Depends(get_db)):
 
     try:
         results = {
-            "processed": 0,
+            "queued": 0,
             "failed": 0,
             "emails": []
         }
@@ -88,7 +89,7 @@ def simulate_batch_ingestion(db: Session = Depends(get_db)):
                 # Enqueue for background processing
                 job = enqueue_email_processing(email_data)
 
-                results["processed"] += 1
+                results["queued"] += 1
                 results["emails"].append({
                     "filename": filename,
                     "job_id": job.id,
@@ -144,3 +145,132 @@ def list_emails(
 
     emails = query.offset(skip).limit(limit).all()
     return emails
+
+
+@router.post("/{email_id}/retry")
+def retry_failed_email(email_id: UUID, db: Session = Depends(get_db)):
+    """
+    Retry processing a failed email.
+
+    This endpoint allows you to manually retry emails that failed after all
+    automatic retry attempts were exhausted.
+
+    Returns:
+        Job information for tracking the retry
+    """
+    from app.schemas.email import EmailIngest, AttachmentData
+
+    # Find the failed email
+    email = db.query(Email).filter(Email.id == email_id).first()
+
+    if not email:
+        raise HTTPException(status_code=404, detail="Email not found")
+
+    if email.processing_status.value != "failed":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Email is not in failed status (current status: {email.processing_status.value})"
+        )
+
+    try:
+        # Convert email back to EmailIngest format using saved raw data
+        if email.raw_email_data:
+            # Perfect replay: use original email data with attachments
+            email_data = EmailIngest(**email.raw_email_data)
+        else:
+            # Fallback: reconstruct from database (attachments will be lost)
+            email_data = EmailIngest(
+                subject=email.subject,
+                sender=email.sender,
+                recipients=email.recipients,
+                body=email.body,
+                attachments=[],
+                received_at=email.received_at
+            )
+
+        # Re-enqueue for processing
+        job = enqueue_email_processing(email_data)
+
+        return {
+            "email_id": str(email.id),
+            "job_id": job.id,
+            "status": "queued",
+            "message": "Email re-queued for processing",
+            "previous_error": email.error_message
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retry email: {str(e)}")
+
+
+@router.post("/retry-all-failed")
+def retry_all_failed_emails(db: Session = Depends(get_db)):
+    """
+    Retry all failed emails.
+
+    This endpoint re-queues all emails with 'failed' status for processing.
+
+    Returns:
+        Summary of retry operation
+    """
+    from app.schemas.email import EmailIngest
+
+    try:
+        # Get all failed emails
+        failed_emails = db.query(Email).filter(
+            Email.processing_status == "failed"
+        ).all()
+
+        if not failed_emails:
+            return {
+                "message": "No failed emails found",
+                "retried": 0,
+                "emails": []
+            }
+
+        results = {
+            "retried": 0,
+            "failed_to_retry": 0,
+            "emails": []
+        }
+
+        for email in failed_emails:
+            try:
+                # Convert back to EmailIngest using saved raw data
+                if email.raw_email_data:
+                    # Perfect replay: use original email data with attachments
+                    email_data = EmailIngest(**email.raw_email_data)
+                else:
+                    # Fallback: reconstruct from database (attachments will be lost)
+                    email_data = EmailIngest(
+                        subject=email.subject,
+                        sender=email.sender,
+                        recipients=email.recipients,
+                        body=email.body,
+                        attachments=[],
+                        received_at=email.received_at
+                    )
+
+                # Re-enqueue
+                job = enqueue_email_processing(email_data)
+
+                results["retried"] += 1
+                results["emails"].append({
+                    "email_id": str(email.id),
+                    "job_id": job.id,
+                    "subject": email.subject,
+                    "status": "queued"
+                })
+
+            except Exception as e:
+                results["failed_to_retry"] += 1
+                results["emails"].append({
+                    "email_id": str(email.id),
+                    "subject": email.subject,
+                    "error": str(e)
+                })
+
+        return results
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retry emails: {str(e)}")

@@ -5,14 +5,12 @@ These tasks are executed by worker processes and include retry logic
 for handling transient failures (OpenAI API timeouts, rate limits, etc.).
 """
 import logging
-from datetime import datetime
 from typing import Dict, Any
 from rq import get_current_job
-from rq.job import Job
 
 from app.database import SessionLocal
 from app.schemas.email import EmailIngest
-from app.services.ingestion import process_email as sync_process_email
+from app.services.ingestion import process_email
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +43,7 @@ def process_email_task(email_data_dict: Dict[str, Any]) -> Dict[str, Any]:
         email_data = EmailIngest(**email_data_dict)
 
         # Process email through ingestion pipeline
-        email = sync_process_email(db, email_data)
+        email = process_email(db, email_data)
 
         result = {
             "job_id": job_id,

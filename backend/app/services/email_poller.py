@@ -1,7 +1,8 @@
 """
 Email poller service for background email fetching.
 
-Runs as a background task to periodically check for new emails.
+Runs as a background task to periodically check for new emails
+and enqueue them for processing.
 """
 import asyncio
 import logging
@@ -50,7 +51,7 @@ class EmailPoller:
 
     async def poll_emails(self) -> Dict[str, Any]:
         """
-        Poll for new emails and process them.
+        Poll for new emails and enqueue them for processing.
 
         Returns:
             Dict with processing results
@@ -60,7 +61,7 @@ class EmailPoller:
 
         results = {
             "poll_number": self.poll_count,
-            "processed": 0,
+            "queued": 0,
             "failed": 0,
             "emails": []
         }
@@ -91,9 +92,9 @@ class EmailPoller:
                     email_data = EmailParser.parse_to_ingest(email_message)
 
                     # Enqueue for background processing (with retry logic)
-                    job = enqueue_email_processing(email_data, high_priority=False)
+                    job = enqueue_email_processing(email_data)
 
-                    results["processed"] += 1
+                    results["queued"] += 1
                     results["emails"].append({
                         "subject": email_data.subject,
                         "job_id": job.id,
@@ -114,7 +115,7 @@ class EmailPoller:
             logger.error(f"Error during email polling: {e}")
             results["error"] = str(e)
 
-        logger.info(f"Poll complete: {results['processed']} processed, {results['failed']} failed")
+        logger.info(f"Poll complete: {results['queued']} queued, {results['failed']} failed")
         return results
 
 

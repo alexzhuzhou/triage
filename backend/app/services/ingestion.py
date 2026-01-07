@@ -364,6 +364,7 @@ def process_email(db: Session, email_data: EmailIngest) -> Email:
         # Mark as processed
         email.processing_status = EmailProcessingStatus.PROCESSED
         email.processed_at = datetime.utcnow()
+        email.raw_email_data = None  # Clear raw data on success to save space
         db.commit()
         db.refresh(email)
 
@@ -377,6 +378,8 @@ def process_email(db: Session, email_data: EmailIngest) -> Email:
         email.processing_status = EmailProcessingStatus.FAILED
         email.error_message = str(e)
         email.processed_at = datetime.utcnow()
+        # Save raw email data for perfect replay on retry (includes attachments)
+        email.raw_email_data = email_data.model_dump(mode="json")
 
         db.add(email)
         db.commit()

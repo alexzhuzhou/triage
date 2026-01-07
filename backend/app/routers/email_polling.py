@@ -69,7 +69,7 @@ def manual_poll_emails(db: Session = Depends(get_db)):
                 email_data = EmailParser.parse_to_ingest(email_message)
 
                 # Enqueue for background processing with retry logic
-                job = enqueue_email_processing(email_data, high_priority=False)
+                job = enqueue_email_processing(email_data)
 
                 results["processed"] += 1
                 results["emails"].append({

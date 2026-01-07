@@ -1,163 +1,225 @@
 """
-Queue management and monitoring endpoints.
+Queue monitoring and management endpoints.
 """
 from typing import Dict, Any
 from fastapi import APIRouter, HTTPException
-
-from app.services.queue import (
-    get_queue_stats,
-    get_all_queue_stats,
-    get_job_status,
-    get_redis_connection,
-    cleanup_finished_jobs
+from rq import Queue, Worker
+from rq.job import Job
+from rq.registry import (
+    StartedJobRegistry,
+    FinishedJobRegistry,
+    FailedJobRegistry,
+    ScheduledJobRegistry,
+    DeferredJobRegistry
 )
+
+from app.services.queue import get_redis_connection, get_queue
 
 router = APIRouter(prefix="/queue", tags=["queue"])
 
 
 @router.get("/status")
-def get_queue_status(cleanup: bool = False) -> Dict[str, Any]:
+def get_queue_status() -> Dict[str, Any]:
     """
-    Get status and statistics for all queues.
+    Get comprehensive queue status including all registries.
 
-    Args:
-        cleanup: If True, clean up finished jobs stuck in started registry (Windows fix)
-
-    Returns queue counts, worker counts, and Redis connection status.
+    Returns counts for:
+    - queued: Jobs waiting to be processed
+    - started: Jobs currently being processed
+    - finished: Successfully completed jobs
+    - failed: Jobs that failed after all retries
+    - scheduled: Jobs scheduled for future execution (retries)
+    - deferred: Jobs waiting for dependencies
     """
     try:
-        # Test Redis connection
         redis_conn = get_redis_connection()
-        redis_conn.ping()
+        queue = get_queue("default")
 
-        # Clean up finished jobs if requested (Windows rq-win workaround)
-        cleaned_total = 0
-        if cleanup:
-            for queue_name in ["default", "high", "low"]:
-                cleaned_total += cleanup_finished_jobs(queue_name)
+        # Get all registries
+        started_registry = StartedJobRegistry(queue=queue)
+        finished_registry = FinishedJobRegistry(queue=queue)
+        failed_registry = FailedJobRegistry(queue=queue)
+        scheduled_registry = ScheduledJobRegistry(queue=queue)
+        deferred_registry = DeferredJobRegistry(queue=queue)
 
-        # Get stats for all queues
-        stats = get_all_queue_stats()
+        # Get workers from Redis connection
+        workers = Worker.all(connection=redis_conn)
 
-        response = {
-            "redis_connected": True,
-            "queues": stats
-        }
-
-        if cleanup:
-            response["cleaned_up_jobs"] = cleaned_total
-
-        return response
-
-    except Exception as e:
         return {
-            "redis_connected": False,
-            "error": str(e),
-            "queues": {}
+            "queue": "default",
+            "counts": {
+                "queued": len(queue),
+                "started": len(started_registry),
+                "finished": len(finished_registry),
+                "failed": len(failed_registry),
+                "scheduled": len(scheduled_registry),
+                "deferred": len(deferred_registry)
+            },
+            "is_empty": queue.is_empty(),
+            "worker_count": len(workers),
+            "total_jobs": (
+                len(queue) +
+                len(started_registry) +
+                len(finished_registry) +
+                len(failed_registry) +
+                len(scheduled_registry) +
+                len(deferred_registry)
+            )
         }
-
-
-@router.get("/stats/{queue_name}")
-def get_specific_queue_stats(queue_name: str) -> Dict[str, Any]:
-    """
-    Get detailed statistics for a specific queue.
-
-    Args:
-        queue_name: Name of the queue (default, high, low)
-
-    Returns:
-        Dict with queue statistics
-    """
-    try:
-        stats = get_queue_stats(queue_name)
-        return stats
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get queue stats: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get queue status: {str(e)}")
 
 
 @router.get("/jobs/{job_id}")
 def get_job_details(job_id: str) -> Dict[str, Any]:
     """
-    Get details and status of a specific job.
+    Get detailed information about a specific job.
 
     Args:
-        job_id: Job ID to check
+        job_id: The job ID to lookup
 
     Returns:
-        Dict with job information
-    """
-    try:
-        job_info = get_job_status(job_id)
-
-        if "error" in job_info:
-            raise HTTPException(status_code=404, detail=job_info["error"])
-
-        return job_info
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to get job status: {str(e)}")
-
-
-@router.post("/cleanup")
-def cleanup_queue_registries() -> Dict[str, Any]:
-    """
-    Clean up finished jobs stuck in started registry.
-
-    This is a workaround for rq-win on Windows which doesn't properly move
-    finished jobs to the finished registry. This endpoint moves all finished
-    jobs from the started registry to the finished registry.
-
-    Returns:
-        Dict with cleanup statistics
-    """
-    try:
-        cleaned_jobs = {}
-        total_cleaned = 0
-
-        for queue_name in ["default", "high", "low"]:
-            count = cleanup_finished_jobs(queue_name)
-            cleaned_jobs[queue_name] = count
-            total_cleaned += count
-
-        return {
-            "success": True,
-            "total_cleaned": total_cleaned,
-            "by_queue": cleaned_jobs,
-            "message": f"Cleaned up {total_cleaned} finished jobs"
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to clean up jobs: {str(e)}")
-
-
-@router.get("/health")
-def queue_health_check() -> Dict[str, Any]:
-    """
-    Health check for queue system.
-
-    Checks Redis connectivity and worker availability.
+        Job details including status, timestamps, result, and error info
     """
     try:
         redis_conn = get_redis_connection()
-        redis_conn.ping()
-
-        stats = get_all_queue_stats()
-
-        # Check if any workers are available
-        total_workers = sum(q.get("workers", 0) for q in stats.values() if isinstance(q, dict))
+        job = Job.fetch(job_id, connection=redis_conn)
 
         return {
-            "status": "healthy",
-            "redis_connected": True,
-            "workers_available": total_workers,
-            "warning": "No workers available" if total_workers == 0 else None
+            "job_id": job.id,
+            "status": job.get_status(),
+            "created_at": job.created_at.isoformat() if job.created_at else None,
+            "enqueued_at": job.enqueued_at.isoformat() if job.enqueued_at else None,
+            "started_at": job.started_at.isoformat() if job.started_at else None,
+            "ended_at": job.ended_at.isoformat() if job.ended_at else None,
+            "result": job.result,
+            "exc_info": job.exc_info,
+            "meta": job.meta,
+            "description": job.description,
+            "retry_attempts": job.retries_left if hasattr(job, 'retries_left') else None
         }
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"Job not found: {str(e)}")
 
+
+@router.get("/failed-jobs")
+def list_failed_jobs(limit: int = 100) -> Dict[str, Any]:
+    """
+    List all failed jobs in the queue.
+
+    Args:
+        limit: Maximum number of jobs to return (default: 100)
+
+    Returns:
+        List of failed job details
+    """
+    try:
+        redis_conn = get_redis_connection()
+        queue = get_queue("default")
+        failed_registry = FailedJobRegistry(queue=queue)
+
+        failed_job_ids = failed_registry.get_job_ids(0, limit - 1)
+        failed_jobs = []
+
+        for job_id in failed_job_ids:
+            try:
+                job = Job.fetch(job_id, connection=redis_conn)
+                failed_jobs.append({
+                    "job_id": job.id,
+                    "description": job.description,
+                    "created_at": job.created_at.isoformat() if job.created_at else None,
+                    "failed_at": job.ended_at.isoformat() if job.ended_at else None,
+                    "error": str(job.exc_info) if job.exc_info else None,
+                    "meta": job.meta
+                })
+            except Exception:
+                # Job might have been deleted, skip it
+                continue
+
+        return {
+            "total_failed": len(failed_registry),
+            "returned": len(failed_jobs),
+            "jobs": failed_jobs
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to list failed jobs: {str(e)}")
+
+
+@router.post("/cleanup")
+def cleanup_finished_jobs() -> Dict[str, Any]:
+    """
+    Clean up finished and failed jobs from the queue registries.
+
+    This helps prevent registry buildup over time. It's safe to call periodically.
+
+    Returns:
+        Counts of cleaned up jobs
+    """
+    try:
+        redis_conn = get_redis_connection()
+        queue = get_queue("default")
+
+        finished_registry = FinishedJobRegistry(queue=queue)
+        failed_registry = FailedJobRegistry(queue=queue)
+
+        # Get counts before cleanup
+        finished_count = len(finished_registry)
+        failed_count = len(failed_registry)
+
+        # Clean up old finished jobs (older than 1 hour)
+        finished_registry.cleanup(1 * 60 * 60)  # 1 hour in seconds
+
+        # Don't auto-cleanup failed jobs - user might want to inspect them
+        # But we can provide manual cleanup if needed
+
+        return {
+            "cleaned": {
+                "finished": finished_count,
+                "failed": 0  # Don't auto-cleanup failed
+            },
+            "remaining": {
+                "finished": len(finished_registry),
+                "failed": len(failed_registry)
+            },
+            "message": "Finished jobs older than 1 hour have been cleaned up. Failed jobs retained for inspection."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to cleanup jobs: {str(e)}")
+
+
+@router.get("/health")
+def queue_health() -> Dict[str, Any]:
+    """
+    Check if the queue system is healthy.
+
+    Returns:
+        Health status including Redis connectivity and worker availability
+    """
+    try:
+        redis_conn = get_redis_connection()
+        queue = get_queue("default")
+
+        # Check Redis connection
+        redis_conn.ping()
+
+        # Check for active workers using Worker.all()
+        workers = Worker.all(connection=redis_conn)
+
+        is_healthy = len(workers) > 0
+
+        return {
+            "status": "healthy" if is_healthy else "degraded",
+            "redis_connected": True,
+            "worker_count": len(workers),
+            "workers": [w.name for w in workers],
+            "message": "Queue is operational" if is_healthy else "No workers available - jobs won't be processed"
+        }
     except Exception as e:
         return {
             "status": "unhealthy",
             "redis_connected": False,
-            "error": str(e)
+            "worker_count": 0,
+            "workers": [],
+            "error": str(e),
+            "message": "Cannot connect to Redis or queue system"
         }

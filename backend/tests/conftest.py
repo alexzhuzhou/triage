@@ -98,21 +98,6 @@ def client(db):
     app.dependency_overrides.clear()
 
 
-# Queue and Redis fixtures
-@pytest.fixture
-def redis_conn():
-    """Create a test Redis connection using fakeredis."""
-    from fakeredis import FakeRedis
-    return FakeRedis()
-
-
-@pytest.fixture
-def test_queue(redis_conn):
-    """Create a test RQ queue."""
-    from rq import Queue
-    return Queue("test", connection=redis_conn)
-
-
 @pytest.fixture
 def sample_email_ingest():
     """Sample EmailIngest object for testing."""

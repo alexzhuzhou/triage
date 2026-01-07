@@ -4,6 +4,7 @@ import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
 import { CaseDetail } from './pages/CaseDetail';
 import { ProcessEmails } from './pages/ProcessEmails';
+import { QueueManagement } from './pages/QueueManagement';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -23,6 +24,7 @@ function App() {
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/process" element={<ProcessEmails />} />
+            <Route path="/queue" element={<QueueManagement />} />
             <Route path="/cases/:id" element={<CaseDetail />} />
           </Routes>
         </Layout>

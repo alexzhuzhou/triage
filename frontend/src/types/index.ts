@@ -64,3 +64,47 @@ export interface BatchProcessResult {
     error?: string;
   }>;
 }
+
+export interface QueueStatus {
+  queue: string;
+  counts: {
+    queued: number;
+    started: number;
+    finished: number;
+    failed: number;
+    scheduled: number;
+    deferred: number;
+  };
+  is_empty: boolean;
+  worker_count: number;
+  total_jobs: number;
+}
+
+export interface QueueHealth {
+  status: 'healthy' | 'degraded' | 'unhealthy';
+  redis_connected: boolean;
+  worker_count: number;
+  workers: string[];
+  message: string;
+  error?: string;
+}
+
+export interface RetryResult {
+  email_id: string;
+  job_id: string;
+  status: string;
+  message: string;
+  previous_error?: string;
+}
+
+export interface RetryAllResult {
+  retried: number;
+  failed_to_retry: number;
+  emails: Array<{
+    email_id: string;
+    job_id?: string;
+    subject: string;
+    status?: string;
+    error?: string;
+  }>;
+}

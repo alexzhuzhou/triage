@@ -1,5 +1,15 @@
 import axios from 'axios';
-import type { Case, Email, Attachment, CaseFilters, BatchProcessResult } from '../types';
+import type {
+  Case,
+  Email,
+  Attachment,
+  CaseFilters,
+  BatchProcessResult,
+  QueueStatus,
+  QueueHealth,
+  RetryResult,
+  RetryAllResult
+} from '../types';
 
 const API_BASE_URL = '/api';
 
@@ -44,6 +54,23 @@ export const emailsApi = {
     const { data } = await apiClient.get<Email>(`/emails/${id}`);
     return data;
   },
+
+  getAll: async (status?: string) => {
+    const params = new URLSearchParams();
+    if (status) params.append('status', status);
+    const { data } = await apiClient.get<Email[]>(`/emails/?${params.toString()}`);
+    return data;
+  },
+
+  retry: async (emailId: string) => {
+    const { data } = await apiClient.post<RetryResult>(`/emails/${emailId}/retry`);
+    return data;
+  },
+
+  retryAll: async () => {
+    const { data } = await apiClient.post<RetryAllResult>('/emails/retry-all-failed');
+    return data;
+  },
 };
 
 export const attachmentsApi = {
@@ -58,6 +85,23 @@ export const attachmentsApi = {
 
   getByCase: async (caseId: string) => {
     const { data } = await apiClient.get<Attachment[]>(`/attachments/case/${caseId}/attachments`);
+    return data;
+  },
+};
+
+export const queueApi = {
+  getStatus: async () => {
+    const { data } = await apiClient.get<QueueStatus>('/queue/status');
+    return data;
+  },
+
+  getHealth: async () => {
+    const { data } = await apiClient.get<QueueHealth>('/queue/health');
+    return data;
+  },
+
+  cleanup: async () => {
+    const { data } = await apiClient.post('/queue/cleanup');
     return data;
   },
 };
