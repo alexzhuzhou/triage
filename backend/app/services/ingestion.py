@@ -260,6 +260,13 @@ def process_email(db: Session, email_data: EmailIngest) -> Email:
     """
     Process an incoming email through the full pipeline.
 
+    This function implements idempotent email processing by checking for existing
+    emails before creating new ones. If an email with the same subject, sender,
+    and received_at timestamp already exists:
+    - If PROCESSED: Return existing email (already done)
+    - If FAILED: Retry processing with same email record (no duplicate)
+    - If PROCESSING: Return existing email (avoid race condition)
+
     Args:
         db: Database session
         email_data: Email data to process
@@ -270,15 +277,48 @@ def process_email(db: Session, email_data: EmailIngest) -> Email:
     Raises:
         Exception: If processing fails critically
     """
-    # Create email record
-    email = Email(
-        subject=email_data.subject,
-        sender=email_data.sender,
-        recipients=email_data.recipients,
-        body=email_data.body,
-        received_at=email_data.received_at or datetime.utcnow(),
-        processing_status=EmailProcessingStatus.PROCESSING
-    )
+    import logging
+    logger = logging.getLogger(__name__)
+
+    received_at = email_data.received_at or datetime.utcnow()
+
+    # Check for existing email to prevent duplicates
+    existing_email = db.query(Email).filter(
+        Email.subject == email_data.subject,
+        Email.sender == email_data.sender,
+        Email.received_at == received_at
+    ).first()
+
+    if existing_email:
+        if existing_email.processing_status == EmailProcessingStatus.PROCESSED:
+            # Already processed successfully - return existing (idempotent)
+            logger.info(f"Email already processed: {existing_email.id}")
+            return existing_email
+
+        elif existing_email.processing_status == EmailProcessingStatus.FAILED:
+            # Retry the failed email - reuse existing record
+            logger.info(f"Retrying failed email: {existing_email.id}")
+            email = existing_email
+            email.processing_status = EmailProcessingStatus.PROCESSING
+            email.error_message = None
+            # Don't add to session - already exists
+
+        elif existing_email.processing_status == EmailProcessingStatus.PROCESSING:
+            # Already being processed (rare edge case - possible race condition)
+            logger.warning(f"Email already being processed: {existing_email.id}")
+            return existing_email
+
+    else:
+        # New email - create it
+        email = Email(
+            subject=email_data.subject,
+            sender=email_data.sender,
+            recipients=email_data.recipients,
+            body=email_data.body,
+            received_at=received_at,
+            processing_status=EmailProcessingStatus.PROCESSING
+        )
+        db.add(email)
 
     try:
         # Extract case data using LLM
@@ -296,22 +336,30 @@ def process_email(db: Session, email_data: EmailIngest) -> Email:
         case = find_or_create_case(db, extraction)
         email.case_id = case.id
 
-        # Add email to session and flush to get the ID
-        db.add(email)
-        db.flush()  # This assigns the ID to email.id
+        # Flush to get email.id (for new emails or retries)
+        db.flush()
 
-        # Process attachments
+        # Process attachments - check for existing to avoid duplicates on retry
         for att_data, att_extraction in zip(email_data.attachments, extraction.attachments):
-            attachment = Attachment(
-                email_id=email.id,
-                case_id=case.id,
-                filename=att_data.filename,
-                content_type=att_data.content_type,
-                content_preview=att_data.text_content[:500] if att_data.text_content else None,
-                category=AttachmentCategory(att_extraction.category),
-                category_reason=att_extraction.category_reason
-            )
-            db.add(attachment)
+            # Check if attachment already exists (for retry scenario)
+            existing_att = db.query(Attachment).filter(
+                Attachment.email_id == email.id,
+                Attachment.filename == att_data.filename
+            ).first()
+
+            if not existing_att:
+                attachment = Attachment(
+                    email_id=email.id,
+                    case_id=case.id,
+                    filename=att_data.filename,
+                    content_type=att_data.content_type,
+                    content_preview=att_data.text_content[:500] if att_data.text_content else None,
+                    category=AttachmentCategory(att_extraction.category),
+                    category_reason=att_extraction.category_reason
+                )
+                db.add(attachment)
+            else:
+                logger.debug(f"Attachment already exists, skipping: {att_data.filename}")
 
         # Mark as processed
         email.processing_status = EmailProcessingStatus.PROCESSED

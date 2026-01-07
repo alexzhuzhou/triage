@@ -120,18 +120,62 @@ def get_job_status(job_id: str) -> Dict[str, Any]:
     }
 
 
-def get_queue_stats(queue_name: str = "default") -> Dict[str, Any]:
+def cleanup_finished_jobs(queue_name: str = "default") -> int:
+    """
+    Clean up jobs that are finished but stuck in the started registry.
+    This is a workaround for rq-win on Windows which doesn't properly move
+    finished jobs to the finished registry.
+
+    Args:
+        queue_name: Queue name to clean up
+
+    Returns:
+        Number of jobs moved to finished registry
+    """
+    from rq.job import Job
+
+    queue = get_queue(queue_name)
+    redis_conn = get_redis_connection()
+    started_registry = queue.started_job_registry
+    finished_registry = queue.finished_job_registry
+
+    moved_count = 0
+    for job_id in list(started_registry.get_job_ids()):
+        try:
+            job = Job.fetch(job_id, connection=redis_conn)
+            if job.get_status() == 'finished':
+                # Move from started to finished registry
+                started_registry.remove(job)
+                finished_registry.add(job, -1)  # -1 means don't set TTL
+                moved_count += 1
+                logger.debug(f"Moved finished job {job_id} to finished registry")
+        except Exception as e:
+            logger.warning(f"Error cleaning up job {job_id}: {e}")
+
+    if moved_count > 0:
+        logger.info(f"Cleaned up {moved_count} finished jobs in {queue_name} queue")
+
+    return moved_count
+
+
+def get_queue_stats(queue_name: str = "default", cleanup: bool = False) -> Dict[str, Any]:
     """
     Get statistics about a queue.
 
     Args:
         queue_name: Queue name to check
+        cleanup: If True, clean up finished jobs stuck in started registry (Windows fix)
 
     Returns:
         Dict with queue statistics
     """
     queue = get_queue(queue_name)
     redis_conn = get_redis_connection()
+
+    # Clean up finished jobs if requested (Windows rq-win workaround)
+    cleaned = 0
+    if cleanup:
+        cleaned = cleanup_finished_jobs(queue_name)
 
     # Get registry counts
     started_registry = queue.started_job_registry
@@ -152,7 +196,8 @@ def get_queue_stats(queue_name: str = "default") -> Dict[str, Any]:
         "failed": len(failed_registry),
         "deferred": len(deferred_registry),
         "scheduled": len(scheduled_registry),
-        "workers": len(workers_on_queue)
+        "workers": len(workers_on_queue),
+        "cleaned_up": cleaned if cleanup else None
     }
 
 

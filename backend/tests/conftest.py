@@ -96,3 +96,46 @@ def client(db):
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+# Queue and Redis fixtures
+@pytest.fixture
+def redis_conn():
+    """Create a test Redis connection using fakeredis."""
+    from fakeredis import FakeRedis
+    return FakeRedis()
+
+
+@pytest.fixture
+def test_queue(redis_conn):
+    """Create a test RQ queue."""
+    from rq import Queue
+    return Queue("test", connection=redis_conn)
+
+
+@pytest.fixture
+def sample_email_ingest():
+    """Sample EmailIngest object for testing."""
+    from app.schemas.email import EmailIngest
+    from datetime import datetime
+    return EmailIngest(
+        subject="Test Email",
+        sender="test@example.com",
+        recipients=["intake@test.com"],
+        body="Test email body",
+        attachments=[],
+        received_at=datetime.utcnow()
+    )
+
+
+@pytest.fixture
+def mock_email_message():
+    """Create a mock email.Message object."""
+    from email.message import EmailMessage
+    msg = EmailMessage()
+    msg["Subject"] = "Test Subject"
+    msg["From"] = "sender@example.com"
+    msg["To"] = "recipient@example.com"
+    msg["Date"] = "Mon, 15 Jan 2024 10:00:00 +0000"
+    msg.set_content("Test email body content")
+    return msg

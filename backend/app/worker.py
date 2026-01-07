@@ -87,7 +87,15 @@ def main():
 
     # Start processing jobs
     logger.info("Worker ready. Waiting for jobs...")
-    worker.work(with_scheduler=True)
+    logger.info("")
+    logger.info("=" * 70)
+    logger.info("IMPORTANT: For automatic retries, run the scheduler separately:")
+    logger.info("  python -m app.scheduler")
+    logger.info("=" * 70)
+    logger.info("")
+
+    # WindowsWorker's with_scheduler doesn't work reliably - use separate scheduler
+    worker.work(with_scheduler=False)
 
 
 if __name__ == "__main__":

@@ -63,6 +63,10 @@ def extract_case_from_email(
     """
     Extract structured case data from an email using OpenAI.
 
+    This function calls the OpenAI API and lets any errors propagate up to the
+    caller. This allows the queue retry mechanism to handle transient failures
+    (timeouts, rate limits) with exponential backoff.
+
     Args:
         subject: Email subject line
         sender: Sender email address
@@ -73,7 +77,7 @@ def extract_case_from_email(
         CaseExtraction: Structured extraction result
 
     Raises:
-        Exception: If OpenAI API call fails
+        Exception: If OpenAI API call fails (triggers retry in queue)
     """
 
     # Build user prompt with email content
@@ -95,42 +99,28 @@ Attachments:
 
 Extract the case information from this email."""
 
-    try:
-        # Use OpenAI's function calling for structured output
-        response = client.chat.completions.create(
-            model="gpt-4o",  # Using GPT-4o for better structured outputs
-            messages=[
-                {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt}
-            ],
-            functions=[{
-                "name": "extract_case_data",
-                "description": "Extract structured IME case data from email",
-                "parameters": CaseExtraction.model_json_schema()
-            }],
-            function_call={"name": "extract_case_data"},
-            temperature=0.1,  # Low temperature for consistency
-        )
+    # Use OpenAI's function calling for structured output
+    response = client.chat.completions.create(
+        model="gpt-4o",  # Using GPT-4o for better structured outputs
+        messages=[
+            {"role": "system", "content": EXTRACTION_SYSTEM_PROMPT},
+            {"role": "user", "content": user_prompt}
+        ],
+        functions=[{
+            "name": "extract_case_data",
+            "description": "Extract structured IME case data from email",
+            "parameters": CaseExtraction.model_json_schema()
+        }],
+        function_call={"name": "extract_case_data"},
+        temperature=0.1,  # Low temperature for consistency
+    )
 
-        # Parse the function call arguments
-        function_args = response.choices[0].message.function_call.arguments
-        extraction_dict = json.loads(function_args)
+    # Parse the function call arguments
+    function_args = response.choices[0].message.function_call.arguments
+    extraction_dict = json.loads(function_args)
 
-        # Validate and return as Pydantic model
-        return CaseExtraction(**extraction_dict)
-
-    except Exception as e:
-        # If extraction fails, return a low-confidence fallback
-        # This ensures we never lose the email data
-        return CaseExtraction(
-            patient_name="EXTRACTION_FAILED",
-            case_number=f"UNKNOWN_{sender}",
-            exam_type="Unknown",
-            attachments=[],
-            confidence=0.0,
-            extraction_notes=f"Extraction failed: {str(e)}",
-            email_intent="other"
-        )
+    # Validate and return as Pydantic model
+    return CaseExtraction(**extraction_dict)
 
 
 def validate_extraction_confidence(extraction: CaseExtraction) -> str:

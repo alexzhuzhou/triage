@@ -8,16 +8,20 @@ from app.services.queue import (
     get_queue_stats,
     get_all_queue_stats,
     get_job_status,
-    get_redis_connection
+    get_redis_connection,
+    cleanup_finished_jobs
 )
 
 router = APIRouter(prefix="/queue", tags=["queue"])
 
 
 @router.get("/status")
-def get_queue_status() -> Dict[str, Any]:
+def get_queue_status(cleanup: bool = False) -> Dict[str, Any]:
     """
     Get status and statistics for all queues.
+
+    Args:
+        cleanup: If True, clean up finished jobs stuck in started registry (Windows fix)
 
     Returns queue counts, worker counts, and Redis connection status.
     """
@@ -26,13 +30,24 @@ def get_queue_status() -> Dict[str, Any]:
         redis_conn = get_redis_connection()
         redis_conn.ping()
 
+        # Clean up finished jobs if requested (Windows rq-win workaround)
+        cleaned_total = 0
+        if cleanup:
+            for queue_name in ["default", "high", "low"]:
+                cleaned_total += cleanup_finished_jobs(queue_name)
+
         # Get stats for all queues
         stats = get_all_queue_stats()
 
-        return {
+        response = {
             "redis_connected": True,
             "queues": stats
         }
+
+        if cleanup:
+            response["cleaned_up_jobs"] = cleaned_total
+
+        return response
 
     except Exception as e:
         return {
@@ -83,6 +98,38 @@ def get_job_details(job_id: str) -> Dict[str, Any]:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get job status: {str(e)}")
+
+
+@router.post("/cleanup")
+def cleanup_queue_registries() -> Dict[str, Any]:
+    """
+    Clean up finished jobs stuck in started registry.
+
+    This is a workaround for rq-win on Windows which doesn't properly move
+    finished jobs to the finished registry. This endpoint moves all finished
+    jobs from the started registry to the finished registry.
+
+    Returns:
+        Dict with cleanup statistics
+    """
+    try:
+        cleaned_jobs = {}
+        total_cleaned = 0
+
+        for queue_name in ["default", "high", "low"]:
+            count = cleanup_finished_jobs(queue_name)
+            cleaned_jobs[queue_name] = count
+            total_cleaned += count
+
+        return {
+            "success": True,
+            "total_cleaned": total_cleaned,
+            "by_queue": cleaned_jobs,
+            "message": f"Cleaned up {total_cleaned} finished jobs"
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clean up jobs: {str(e)}")
 
 
 @router.get("/health")

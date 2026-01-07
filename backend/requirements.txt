@@ -25,3 +25,4 @@ rq-win==0.4.1  # Windows compatibility for RQ workers
 pytest==7.4.4
 pytest-asyncio==0.23.3
 httpx==0.26.0
+fakeredis==2.20.0
