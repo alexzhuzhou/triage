@@ -43,6 +43,10 @@ cp .env.example .env
 # EMAIL_ENABLED=true
 # EMAIL_ADDRESS=your-email@gmail.com
 # EMAIL_PASSWORD=your-app-password
+
+# Optional: Enable LLM failure simulation for testing retry logic
+# SIMULATE_LLM_FAILURES=true
+# LLM_FAILURE_RATE=0.7  # 70% failure rate
 ```
 
 **For Email Integration (Optional):** See [EMAIL_INTEGRATION.md](EMAIL_INTEGRATION.md) for detailed setup instructions.
@@ -113,10 +117,9 @@ The worker will:
 - Process queued email jobs with automatic retries (5 attempts)
 - Handle LLM extraction failures gracefully
 - Use exponential backoff (1s, 2s, 4s, 8s, 16s)
+- Include built-in scheduler for automatic retry scheduling
 
-**Windows Users**: The worker uses `rq-win` for Windows compatibility (installed automatically via requirements.txt).
-
-**Linux/macOS Users**: The worker uses standard RQ with process forking.
+**Note**: The worker uses `SimpleWorker` which processes jobs sequentially in the main thread. This works identically on Windows, Linux, and macOS (no fork/spawn required).
 
 ### 8. Start the Frontend (Optional)
 
@@ -254,10 +257,12 @@ curl http://localhost:8000/attachments/by-category/medical_records
 
 ### Emails
 
-- `POST /emails/ingest` - Submit an email for processing
+- `POST /emails/ingest` - Submit an email for processing (returns job_id, status 202)
 - `POST /emails/simulate-batch` - Process all sample emails
 - `GET /emails/{id}` - Get email details with extraction
-- `GET /emails/` - List all emails (with filters)
+- `GET /emails/?status=failed` - List emails by processing status
+- `POST /emails/{id}/retry` - Retry a failed email using saved raw_email_data
+- `POST /emails/retry-all-failed` - Retry all failed emails in bulk
 
 ### Cases
 
@@ -280,10 +285,11 @@ curl http://localhost:8000/attachments/by-category/medical_records
 
 ### Queue & Monitoring
 
-- `GET /queue/status` - Get status and statistics for all queues (queued, started, finished, failed counts)
-- `GET /queue/stats/{queue_name}` - Get detailed statistics for a specific queue (default, high, low)
-- `GET /queue/jobs/{job_id}` - Get details and status of a specific job
+- `GET /queue/status` - Get queue statistics (queued, started, finished, failed, scheduled, deferred counts)
 - `GET /queue/health` - Health check for queue system (Redis connectivity, worker availability)
+- `GET /queue/jobs/{job_id}` - Get details and status of a specific job
+- `GET /queue/failed-jobs` - List all failed jobs with error details
+- `POST /queue/cleanup` - Clean up old finished jobs (retains failed for inspection)
 
 ## Running Tests
 
@@ -320,14 +326,18 @@ triage/
 │   │   ├── services/            # Business logic
 │   │   │   ├── extraction.py    # OpenAI integration
 │   │   │   ├── ingestion.py     # Email processing pipeline
+│   │   │   ├── queue.py         # Queue management with RQ
 │   │   │   ├── email_fetcher.py # IMAP email fetching
 │   │   │   ├── email_parser.py  # Email format adapter
 │   │   │   └── email_poller.py  # Background email polling
-│   │   └── routers/             # API endpoints
-│   │       ├── cases.py
-│   │       ├── emails.py
-│   │       ├── attachments.py
-│   │       └── email_polling.py
+│   │   ├── routers/             # API endpoints
+│   │   │   ├── cases.py
+│   │   │   ├── emails.py
+│   │   │   ├── attachments.py
+│   │   │   ├── email_polling.py
+│   │   │   └── queue.py         # Queue monitoring endpoints
+│   │   ├── tasks.py             # Background tasks
+│   │   └── worker.py            # RQ worker entry point
 │   ├── sample_emails/           # Sample email JSON files
 │   ├── tests/                   # Test suite
 │   ├── alembic/                 # Database migrations
@@ -346,7 +356,8 @@ triage/
 │   │   ├── pages/               # Page components
 │   │   │   ├── Dashboard.tsx
 │   │   │   ├── CaseDetail.tsx
-│   │   │   └── ProcessEmails.tsx
+│   │   │   ├── ProcessEmails.tsx
+│   │   │   └── QueueManagement.tsx
 │   │   ├── hooks/               # React Query hooks
 │   │   │   ├── useCases.ts
 │   │   │   └── useEmails.ts
@@ -383,8 +394,10 @@ Primary entity representing an IME case:
 ### Email
 Source records that link to cases:
 - Stores raw email data (subject, sender, body, recipients)
-- `raw_extraction`: JSON blob of LLM response
+- `raw_extraction`: JSON blob of LLM response for debugging
+- `raw_email_data`: Original email with attachments (only saved on failure for retry)
 - `processing_status`: pending | processing | processed | failed
+- `error_message`: Exception details for failed emails
 
 ### Attachment
 Email attachments with categorization and storage:
@@ -419,6 +432,14 @@ Email attachments with categorization and storage:
 - **Batch Processing**: Process all sample emails with one click
 - **Results Display**: Shows processed count, failed count, and individual email results
 - **Error Details**: View specific errors for failed emails
+
+### Queue Management Page
+- **Real-time Queue Statistics**: Auto-refresh every 3 seconds (queued, processing, scheduled, finished, failed counts)
+- **Queue Health Indicator**: Color-coded status (healthy/degraded/unhealthy)
+- **Failed Emails List**: Shows all failed emails with full error details (auto-refresh every 5 seconds)
+- **Individual Email Retry**: Retry single failed emails with one click
+- **Bulk Retry**: Retry all failed emails at once
+- **Email Detail Modal**: View full email content, metadata, and error messages
 
 ### UI Components
 - **Color-Coded Badges**: Visual indicators for status, confidence, and categories
@@ -482,49 +503,65 @@ Action needed: Contact referring party to obtain missing details.
 
 ## Queue System & Reliability
 
-The system uses **Redis Queue (RQ)** for reliable, asynchronous email processing with automatic retries:
+The system uses **Redis Queue (RQ)** with **SimpleWorker** for reliable, asynchronous email processing with automatic retries:
 
 ### Architecture
 
 ```
-Email Entry → Redis Queue → Worker Process → LLM Extraction → Database
-     ↓              ↓               ↓
-  Job ID      Persistent      Auto-Retry on Failure
-              Storage         (5 attempts, exponential backoff)
+Email Entry → Redis Queue → SimpleWorker → LLM Extraction → Database
+     ↓              ↓            ↓                ↓
+Deterministic  Persistent   Sequential      Auto-Retry
+  Job ID       Storage      Processing      (5 attempts)
 ```
 
 ### Key Features
 
+**Deterministic Job IDs**:
+- Job IDs based on SHA256(sender|subject|received_at)
+- Same email = same job ID = prevents duplicate jobs
+- If same email is enqueued while already queued/processing, returns existing job
+- No duplicate OpenAI API calls = cost savings
+
 **Automatic Retries**:
 - Failed jobs retry automatically up to 5 times
 - Exponential backoff: 1s, 2s, 4s, 8s, 16s between attempts
+- Built-in scheduler handles retry scheduling (no separate process needed)
 - Handles transient failures (OpenAI API timeouts, rate limits)
 
-**Graceful Degradation**:
-- If Redis is unavailable, API falls back to synchronous processing
-- System remains available even if queue is down
-- No data loss in either mode
+**Attachment Preservation on Failure**:
+- Failed emails save complete `raw_email_data` (JSONB) including attachments
+- Enables perfect replay on manual retry
+- Successful emails clear raw_email_data to save storage (~5KB per failed email only)
+
+**SimpleWorker Benefits**:
+- Cross-platform: Works identically on Windows, Linux, and macOS
+- No fork/spawn required (processes jobs in main thread)
+- Lower overhead and memory usage
+- Built-in scheduler with `with_scheduler=True`
+- Ideal for I/O-bound work (waiting on OpenAI API, database)
 
 **Queue Management**:
-- Three priority queues: `high`, `default`, `low`
-- Background worker processes jobs sequentially (Windows) or in parallel (Linux)
-- Monitor queue health via `/queue/status` endpoint
-
-**Windows Compatibility**:
-- Uses `rq-win` package for Windows development
-- Automatically detected and configured
-- For production, use Linux or Docker containers
+- Single `default` queue for all email processing
+- Monitor queue health via `/queue/status` and `/queue/health` endpoints
+- View failed jobs with full error details via `/queue/failed-jobs`
+- Manual retry endpoints: `/emails/{id}/retry` and `/emails/retry-all-failed`
 
 **Job Monitoring**:
-- Track job status: `queued`, `started`, `finished`, `failed`
+- Track job status: `queued`, `started`, `finished`, `failed`, `scheduled`, `deferred`
 - View job details and results via `/queue/jobs/{job_id}`
 - Failed jobs moved to failed registry for inspection
+- Frontend Queue Management page provides real-time monitoring UI
+
+**Idempotent Processing**:
+- Checks for existing emails by (subject, sender, received_at)
+- Retrying failed email reuses existing record instead of creating duplicate
+- Prevents duplicate database records and API calls
 
 ### Email Processing Paths
 
 All email entry points use the queue system:
 
-1. **API Endpoint** (`POST /emails/ingest`): Enqueues job, waits for result
+1. **API Endpoint** (`POST /emails/ingest`): Enqueues job, returns job_id immediately (status 202)
 2. **Batch Processing** (`POST /emails/simulate-batch`): Enqueues all 10 sample emails
 3. **Manual Polling** (`POST /email-polling/manual-poll`): Enqueues fetched emails
 4. **Background Polling**: Auto-polls every 60s, enqueues new emails
@@ -688,12 +725,13 @@ docker compose restart postgres
 **Worker not processing jobs:**
 ```bash
 # Check if worker is running
-# You should see logs like: "Worker ready. Waiting for jobs..."
+# You should see logs like: "SimpleWorker ready. Waiting for jobs..."
 
 # Check queue status
 curl http://localhost:8000/queue/status
 
-# Should show workers: 1 for each queue
+# Check queue health (should show worker_count: 1)
+curl http://localhost:8000/queue/health
 ```
 
 **Redis connection errors:**
@@ -711,19 +749,22 @@ docker compose restart redis
 docker compose exec redis redis-cli FLUSHDB
 ```
 
-**Worker fails with "module 'os' has no attribute 'fork'" on Windows:**
-- This is normal! The system automatically uses `rq-win` on Windows
-- Make sure `rq-win` is installed: `pip install rq-win`
-- Restart the worker
-
-**Jobs stuck in "started" state:**
-- On Windows, worker processes jobs sequentially (one at a time)
+**Jobs processing slowly:**
+- SimpleWorker processes jobs sequentially (one at a time)
+- Each job takes 1-5 seconds for OpenAI API call
+- This is normal for I/O-bound workloads
 - Check worker logs for errors
-- Jobs may be processing slowly due to OpenAI API calls (each takes 2-5 seconds)
 
-**"No workers available" warning:**
+**"No workers available" or "degraded" status:**
 - Make sure the worker is running in a separate terminal: `python -m app.worker`
 - Check that the worker didn't crash (view terminal logs)
+- Worker takes a few seconds to register with Redis
+
+**Failed emails not retrying:**
+- Worker includes built-in scheduler for automatic retries
+- Check failed jobs: `curl http://localhost:8000/queue/failed-jobs`
+- Manual retry available: `curl -X POST http://localhost:8000/emails/{email_id}/retry`
+- Or use Queue Management page in frontend: http://localhost:5173/queue
 
 ### Migration Issues
 
