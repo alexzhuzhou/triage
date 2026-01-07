@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import { useCase, useUpdateCase } from '../hooks/useCases';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ConfidenceBadge } from '../components/ConfidenceBadge';
@@ -17,18 +18,81 @@ export function CaseDetail() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({
+    patient_name: '',
+    exam_type: '',
+    exam_date: '',
+    exam_time: '',
+    exam_location: '',
+    referring_party: '',
+    referring_email: '',
+    report_due_date: '',
     status: '',
     notes: '',
   });
   const [previewAttachment, setPreviewAttachment] = useState<Attachment | null>(null);
   const [previewEmail, setPreviewEmail] = useState<Email | null>(null);
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
+
+    // Required fields
+    if (!editForm.patient_name.trim()) {
+      errors.patient_name = 'Patient name is required';
+    }
+
+    if (!editForm.exam_type.trim()) {
+      errors.exam_type = 'Exam type is required';
+    }
+
+    // Email format validation
+    if (editForm.referring_email && editForm.referring_email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(editForm.referring_email)) {
+        errors.referring_email = 'Please enter a valid email address';
+      }
+    }
+
+    // Date logic validation
+    if (editForm.exam_date && editForm.report_due_date) {
+      const examDate = new Date(editForm.exam_date);
+      const dueDate = new Date(editForm.report_due_date);
+
+      if (dueDate < examDate) {
+        errors.report_due_date = 'Report due date must be after exam date';
+      }
+    }
+
+    // Exam date shouldn't be too far in the past (more than 2 years)
+    if (editForm.exam_date) {
+      const examDate = new Date(editForm.exam_date);
+      const twoYearsAgo = new Date();
+      twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+
+      if (examDate < twoYearsAgo) {
+        errors.exam_date = 'Exam date seems unusually old. Please verify.';
+      }
+    }
+
+    setValidationErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
 
   const handleEdit = () => {
     if (caseData) {
       setEditForm({
+        patient_name: caseData.patient_name,
+        exam_type: caseData.exam_type,
+        exam_date: caseData.exam_date || '',
+        exam_time: caseData.exam_time ? caseData.exam_time.substring(0, 5) : '', // Strip seconds for HTML5 time input
+        exam_location: caseData.exam_location || '',
+        referring_party: caseData.referring_party || '',
+        referring_email: caseData.referring_email || '',
+        report_due_date: caseData.report_due_date || '',
         status: caseData.status,
         notes: caseData.notes || '',
       });
+      setValidationErrors({});
       setIsEditing(true);
     }
   };
@@ -36,12 +100,37 @@ export function CaseDetail() {
   const handleSave = async () => {
     if (!id) return;
 
-    await updateCase.mutateAsync({
-      id,
-      updates: editForm,
-    });
+    // Validate form before saving
+    if (!validateForm()) {
+      toast.error('Please fix the validation errors before saving');
+      return;
+    }
 
-    setIsEditing(false);
+    // Clean empty strings to null for nullable fields
+    const cleanedUpdates = {
+      ...editForm,
+      exam_date: editForm.exam_date || null,
+      exam_time: editForm.exam_time || null,
+      exam_location: editForm.exam_location || null,
+      referring_party: editForm.referring_party || null,
+      referring_email: editForm.referring_email || null,
+      report_due_date: editForm.report_due_date || null,
+      notes: editForm.notes || null,
+    };
+
+    try {
+      await updateCase.mutateAsync({
+        id,
+        updates: cleanedUpdates,
+      });
+
+      toast.success('Case updated successfully');
+      setIsEditing(false);
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to update case';
+      toast.error(errorMessage);
+      console.error('Failed to update case:', error);
+    }
   };
 
   if (isLoading) return <LoadingSpinner />;
@@ -72,7 +161,31 @@ export function CaseDetail() {
             <h1 className="text-4xl font-bold text-gray-900 tracking-tight">
               {caseData.case_number}
             </h1>
-            <p className="mt-3 text-lg text-gray-600 font-medium">{caseData.patient_name}</p>
+            {isEditing ? (
+              <div className="mt-3">
+                <input
+                  type="text"
+                  value={editForm.patient_name}
+                  onChange={(e) =>
+                    setEditForm({ ...editForm, patient_name: e.target.value })
+                  }
+                  required
+                  placeholder="Patient Name"
+                  className={`px-4 py-2 text-lg border rounded-xl focus:ring-2 focus:ring-orange-500 transition-all font-medium ${
+                    validationErrors.patient_name
+                      ? 'border-red-300 bg-red-50'
+                      : 'border-gray-300'
+                  }`}
+                />
+                {validationErrors.patient_name && (
+                  <p className="mt-1 text-sm text-red-600 font-medium">
+                    {validationErrors.patient_name}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="mt-3 text-lg text-gray-600 font-medium">{caseData.patient_name}</p>
+            )}
           </div>
           {!isEditing && (
             <button
@@ -130,51 +243,197 @@ export function CaseDetail() {
 
               <div>
                 <label className="text-sm font-semibold text-gray-600 uppercase tracking-wide">Exam Type</label>
-                <p className="mt-2 text-base text-gray-900 font-medium">{caseData.exam_type}</p>
+                {isEditing ? (
+                  <div>
+                    <input
+                      type="text"
+                      value={editForm.exam_type}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, exam_type: e.target.value })
+                      }
+                      required
+                      placeholder="e.g., Orthopedic, Psychiatric, Cardiology"
+                      className={`mt-2 w-full px-4 py-3 text-base border rounded-xl focus:ring-2 focus:ring-orange-500 transition-all ${
+                        validationErrors.exam_type
+                          ? 'border-red-300 bg-red-50'
+                          : 'border-gray-300'
+                      }`}
+                    />
+                    {validationErrors.exam_type && (
+                      <p className="mt-1 text-sm text-red-600 font-medium">
+                        {validationErrors.exam_type}
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-base text-gray-900 font-medium">{caseData.exam_type}</p>
+                )}
               </div>
 
-              {caseData.exam_date && (
-                <div>
-                  <label className="text-sm font-semibold text-gray-600 uppercase tracking-wide">
-                    Exam Date & Time
-                  </label>
-                  <p className="mt-2 text-base text-gray-900 font-medium">
-                    {formatDateOnly(caseData.exam_date)}
-                    {caseData.exam_time && ` at ${caseData.exam_time}`}
-                  </p>
+              {isEditing ? (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-semibold text-gray-600 uppercase tracking-wide">
+                      Exam Date
+                    </label>
+                    <input
+                      type="date"
+                      value={editForm.exam_date}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, exam_date: e.target.value })
+                      }
+                      className={`mt-2 w-full px-4 py-3 text-base border rounded-xl focus:ring-2 focus:ring-orange-500 transition-all ${
+                        validationErrors.exam_date
+                          ? 'border-red-300 bg-red-50'
+                          : 'border-gray-300'
+                      }`}
+                    />
+                    {validationErrors.exam_date && (
+                      <p className="mt-1 text-sm text-red-600 font-medium">
+                        {validationErrors.exam_date}
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold text-gray-600 uppercase tracking-wide">
+                      Exam Time
+                    </label>
+                    <input
+                      type="time"
+                      value={editForm.exam_time}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, exam_time: e.target.value })
+                      }
+                      className="mt-2 w-full px-4 py-3 text-base border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 transition-all"
+                    />
+                  </div>
                 </div>
+              ) : (
+                caseData.exam_date && (
+                  <div>
+                    <label className="text-sm font-semibold text-gray-600 uppercase tracking-wide">
+                      Exam Date & Time
+                    </label>
+                    <p className="mt-2 text-base text-gray-900 font-medium">
+                      {formatDateOnly(caseData.exam_date)}
+                      {caseData.exam_time && ` at ${caseData.exam_time}`}
+                    </p>
+                  </div>
+                )
               )}
 
-              {caseData.exam_location && (
+              {isEditing ? (
                 <div>
                   <label className="text-sm font-semibold text-gray-600 uppercase tracking-wide">Location</label>
-                  <p className="mt-2 text-base text-gray-900 font-medium">{caseData.exam_location}</p>
+                  <input
+                    type="text"
+                    value={editForm.exam_location}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, exam_location: e.target.value })
+                    }
+                    placeholder="e.g., Main Clinic, Room 201"
+                    className="mt-2 w-full px-4 py-3 text-base border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 transition-all"
+                  />
                 </div>
+              ) : (
+                caseData.exam_location && (
+                  <div>
+                    <label className="text-sm font-semibold text-gray-600 uppercase tracking-wide">Location</label>
+                    <p className="mt-2 text-base text-gray-900 font-medium">{caseData.exam_location}</p>
+                  </div>
+                )
               )}
 
-              {caseData.referring_party && (
-                <div>
-                  <label className="text-sm font-semibold text-gray-600 uppercase tracking-wide">
-                    Referring Party
-                  </label>
-                  <p className="mt-2 text-base text-gray-900 font-medium">{caseData.referring_party}</p>
-                  {caseData.referring_email && (
-                    <p className="mt-1.5 text-sm text-gray-600 font-medium">
-                      {caseData.referring_email}
-                    </p>
-                  )}
+              {isEditing ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-semibold text-gray-600 uppercase tracking-wide">
+                      Referring Party
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.referring_party}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, referring_party: e.target.value })
+                      }
+                      placeholder="e.g., Dr. Smith, ABC Law Firm"
+                      className="mt-2 w-full px-4 py-3 text-base border border-gray-300 rounded-xl focus:ring-2 focus:ring-orange-500 transition-all"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-semibold text-gray-600 uppercase tracking-wide">
+                      Referring Email
+                    </label>
+                    <input
+                      type="email"
+                      value={editForm.referring_email}
+                      onChange={(e) =>
+                        setEditForm({ ...editForm, referring_email: e.target.value })
+                      }
+                      placeholder="email@example.com"
+                      className={`mt-2 w-full px-4 py-3 text-base border rounded-xl focus:ring-2 focus:ring-orange-500 transition-all ${
+                        validationErrors.referring_email
+                          ? 'border-red-300 bg-red-50'
+                          : 'border-gray-300'
+                      }`}
+                    />
+                    {validationErrors.referring_email && (
+                      <p className="mt-1 text-sm text-red-600 font-medium">
+                        {validationErrors.referring_email}
+                      </p>
+                    )}
+                  </div>
                 </div>
+              ) : (
+                caseData.referring_party && (
+                  <div>
+                    <label className="text-sm font-semibold text-gray-600 uppercase tracking-wide">
+                      Referring Party
+                    </label>
+                    <p className="mt-2 text-base text-gray-900 font-medium">{caseData.referring_party}</p>
+                    {caseData.referring_email && (
+                      <p className="mt-1.5 text-sm text-gray-600 font-medium">
+                        {caseData.referring_email}
+                      </p>
+                    )}
+                  </div>
+                )
               )}
 
-              {caseData.report_due_date && (
+              {isEditing ? (
                 <div>
                   <label className="text-sm font-semibold text-gray-600 uppercase tracking-wide">
                     Report Due Date
                   </label>
-                  <p className="mt-2 text-base text-gray-900 font-medium">
-                    {formatDateOnly(caseData.report_due_date)}
-                  </p>
+                  <input
+                    type="date"
+                    value={editForm.report_due_date}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, report_due_date: e.target.value })
+                    }
+                    className={`mt-2 w-full px-4 py-3 text-base border rounded-xl focus:ring-2 focus:ring-orange-500 transition-all ${
+                      validationErrors.report_due_date
+                        ? 'border-red-300 bg-red-50'
+                        : 'border-gray-300'
+                    }`}
+                  />
+                  {validationErrors.report_due_date && (
+                    <p className="mt-1 text-sm text-red-600 font-medium">
+                      {validationErrors.report_due_date}
+                    </p>
+                  )}
                 </div>
+              ) : (
+                caseData.report_due_date && (
+                  <div>
+                    <label className="text-sm font-semibold text-gray-600 uppercase tracking-wide">
+                      Report Due Date
+                    </label>
+                    <p className="mt-2 text-base text-gray-900 font-medium">
+                      {formatDateOnly(caseData.report_due_date)}
+                    </p>
+                  </div>
+                )
               )}
             </div>
           </div>
@@ -209,8 +468,8 @@ export function CaseDetail() {
               </button>
               <button
                 onClick={handleSave}
-                disabled={updateCase.isPending}
-                className="px-7 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 disabled:opacity-50 transition-all shadow-md font-semibold text-base flex items-center gap-2"
+                disabled={updateCase.isPending || Object.keys(validationErrors).length > 0}
+                className="px-7 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md font-semibold text-base flex items-center gap-2"
               >
                 {updateCase.isPending ? (
                   <>

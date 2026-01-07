@@ -8,14 +8,14 @@ export function QueueManagement() {
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
 
   // Fetch failed emails
-  const { data: failedEmails = [], isLoading: loadingEmails, refetch: refetchEmails } = useQuery({
+  const { data: failedEmails = [], isLoading: loadingEmails } = useQuery({
     queryKey: ['emails', 'failed'],
     queryFn: () => emailsApi.getAll('failed'),
     refetchInterval: 5000, // Auto-refresh every 5 seconds
   });
 
   // Fetch queue status
-  const { data: queueStatus, isLoading: loadingQueue } = useQuery({
+  const { data: queueStatus } = useQuery({
     queryKey: ['queue', 'status'],
     queryFn: () => queueApi.getStatus(),
     refetchInterval: 3000, // Auto-refresh every 3 seconds
