@@ -15,8 +15,13 @@ ENV/
 *.swp
 *.swo
 
-# Environment
+# Environment files (contains secrets - NEVER commit!)
 .env
+.env.*
+!.env.example
+backend/.env.local
+backend/.env.test-secrets
+frontend/.env.production
 
 # Database
 *.db
@@ -31,6 +36,9 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
+# Cloud SQL Proxy (downloadable binary - don't commit)
+cloud-sql-proxy.exe
+cloud-sql-proxy
 
 .claude/
 CLAUDE.md

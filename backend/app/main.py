@@ -39,9 +39,11 @@ app = FastAPI(
 )
 
 # CORS middleware for frontend integration
+# Parse allowed origins from environment variable (comma-separated)
+origins = [origin.strip() for origin in settings.ALLOWED_ORIGINS.split(",")]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:5173"],  # Vite default ports
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -1,0 +1,55 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Database
+*.db
+*.db-journal
+
+# Testing
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Version control
+.git/
+.gitignore
+
+# Documentation
+README.md
+*.md
+docs/
+
+# Development files
+docker-compose.yml
+alembic.ini.example
+
+# Sample data
+sample_emails/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

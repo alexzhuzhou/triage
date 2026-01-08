@@ -10,12 +10,33 @@ Usage:
 Environment variables are loaded from .env file.
 """
 import sys
+import os
 import logging
+import threading
 from rq import SimpleWorker
 from rq.logutils import setup_loghandlers
+from fastapi import FastAPI
+import uvicorn
 
 from app.config import settings
 from app.services.queue import get_redis_connection
+
+# Health check app for Cloud Run (requires HTTP endpoint)
+health_app = FastAPI()
+
+
+@health_app.get("/health")
+def health():
+    """Health check endpoint for Cloud Run."""
+    return {"status": "healthy", "worker": "running", "service": "triage-worker"}
+
+
+def run_health_server():
+    """Run health check HTTP server in background thread."""
+    port = int(os.environ.get("PORT", 8080))
+    logger = logging.getLogger(__name__)
+    logger.info(f"Starting health check server on port {port}")
+    uvicorn.run(health_app, host="0.0.0.0", port=port, log_level="warning")
 
 # Configure logging
 logging.basicConfig(
@@ -30,12 +51,17 @@ logger = logging.getLogger(__name__)
 
 def main():
     """
-    Start the RQ worker using SpawnWorker.
+    Start the RQ worker using SimpleWorker with health check server.
     """
-    logger.info("Starting RQ SpawnWorker...")
+    logger.info("Starting RQ Worker...")
     logger.info(f"Redis URL: {settings.REDIS_URL}")
     logger.info(f"Environment: {settings.ENV}")
     logger.info(f"Max retries: {settings.QUEUE_RETRY_ATTEMPTS}")
+
+    # Start health check server in background thread (for Cloud Run)
+    health_thread = threading.Thread(target=run_health_server, daemon=True)
+    health_thread.start()
+    logger.info("Health check server started in background thread")
 
     # Get Redis connection
     redis_conn = get_redis_connection()

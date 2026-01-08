@@ -1,0 +1,29 @@
+FROM python:3.11-slim
+
+# Install system dependencies including poppler-utils for PDF processing
+RUN apt-get update && apt-get install -y \
+    poppler-utils \
+    libpq-dev \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create app directory
+WORKDIR /app
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Create non-root user for security
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+USER appuser
+
+# Cloud Run requires a port (worker.py will include health check server)
+ENV PORT=8080
+EXPOSE 8080
+
+# Run the RQ worker (modified to include health check endpoint)
+CMD python -m app.worker

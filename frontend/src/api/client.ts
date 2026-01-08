@@ -11,7 +11,8 @@ import type {
   RetryAllResult
 } from '../types';
 
-const API_BASE_URL = '/api';
+// Use environment variable for API base URL (falls back to /api for development)
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
