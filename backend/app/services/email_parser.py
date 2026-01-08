@@ -11,6 +11,7 @@ from datetime import datetime
 import logging
 
 from app.schemas.email import EmailIngest, AttachmentData
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -164,22 +165,47 @@ class EmailParser:
 
                         content_type = part.get_content_type()
 
-                        # For text attachments, optionally extract content
+                        # Get binary payload
+                        payload = part.get_payload(decode=True)
+
+                        # Initialize fields
                         text_content = None
-                        if content_type.startswith('text/'):
+                        pdf_images = None
+
+                        # Handle PDF attachments with image conversion
+                        if content_type == 'application/pdf' and payload and settings.PDF_CONVERSION_ENABLED:
                             try:
-                                payload = part.get_payload(decode=True)
-                                if payload:
-                                    charset = part.get_content_charset() or 'utf-8'
-                                    # Limit to first 1000 chars
-                                    text_content = payload.decode(charset, errors='ignore')[:1000]
+                                from app.services.pdf_converter import convert_pdf_to_images
+                                pdf_images = convert_pdf_to_images(payload)
+                                logger.info(f"Converted PDF {filename} to {len(pdf_images)} images")
+                            except Exception as e:
+                                logger.warning(f"PDF conversion failed for {filename}: {e}")
+                                # Fallback: Try pypdf text extraction
+                                try:
+                                    import pypdf
+                                    import io
+                                    reader = pypdf.PdfReader(io.BytesIO(payload))
+                                    text_content = " ".join(
+                                        page.extract_text() for page in reader.pages
+                                    )[:1000]
+                                    logger.debug(f"Fell back to text extraction for {filename}")
+                                except Exception as fallback_error:
+                                    logger.debug(f"Text extraction also failed for {filename}: {fallback_error}")
+
+                        # Handle text attachments
+                        elif content_type.startswith('text/') and payload:
+                            try:
+                                charset = part.get_content_charset() or 'utf-8'
+                                # Limit to first 1000 chars
+                                text_content = payload.decode(charset, errors='ignore')[:1000]
                             except Exception as e:
                                 logger.debug(f"Could not extract text from {filename}: {e}")
 
                         attachments.append(AttachmentData(
                             filename=filename,
                             content_type=content_type,
-                            text_content=text_content
+                            text_content=text_content,
+                            pdf_images=pdf_images
                         ))
 
         except Exception as e:

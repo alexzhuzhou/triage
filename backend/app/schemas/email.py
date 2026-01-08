@@ -11,7 +11,8 @@ class AttachmentData(BaseModel):
     """Schema for attachment data in email ingestion."""
     filename: str
     content_type: Optional[str] = None
-    text_content: Optional[str] = None  # Placeholder or extracted text
+    text_content: Optional[str] = None  # For text files
+    pdf_images: Optional[List[str]] = None  # Base64-encoded PNG images for PDFs (one per page)
 
 
 class EmailIngest(BaseModel):

@@ -25,6 +25,10 @@ Full-stack application that processes inbound emails for Independent Medical Exa
 - Python 3.11+
 - Docker & Docker Compose
 - OpenAI API key
+- **poppler-utils** (required for PDF-to-image conversion)
+  - Windows: `choco install poppler` or download from [poppler-windows](https://github.com/oschwartz10612/poppler-windows/releases)
+  - macOS: `brew install poppler`
+  - Linux: `sudo apt-get install poppler-utils`
 
 ### 2. Environment Setup
 
@@ -47,9 +51,16 @@ cp .env.example .env
 # Optional: Enable LLM failure simulation for testing retry logic
 # SIMULATE_LLM_FAILURES=true
 # LLM_FAILURE_RATE=0.7  # 70% failure rate
+
+# Optional: Configure PDF processing (defaults shown)
+# PDF_CONVERSION_ENABLED=true
+# PDF_CONVERSION_DPI=150  # 150=balanced, 300=high quality
+# VISION_IMAGE_DETAIL=high  # low, high, or auto
 ```
 
 **For Email Integration (Optional):** See [EMAIL_INTEGRATION.md](EMAIL_INTEGRATION.md) for detailed setup instructions.
+
+**For PDF Processing (Optional):** See [PDF_SETUP.md](PDF_SETUP.md) for poppler-utils installation and configuration.
 
 ### 3. Start PostgreSQL and Redis
 
@@ -324,12 +335,14 @@ triage/
 │   │   │   ├── email.py
 │   │   │   └── extraction.py    # LLM extraction schema
 │   │   ├── services/            # Business logic
-│   │   │   ├── extraction.py    # OpenAI integration
+│   │   │   ├── extraction.py    # OpenAI Vision API integration
 │   │   │   ├── ingestion.py     # Email processing pipeline
 │   │   │   ├── queue.py         # Queue management with RQ
 │   │   │   ├── email_fetcher.py # IMAP email fetching
-│   │   │   ├── email_parser.py  # Email format adapter
-│   │   │   └── email_poller.py  # Background email polling
+│   │   │   ├── email_parser.py  # Email format adapter (includes PDF conversion)
+│   │   │   ├── email_poller.py  # Background email polling
+│   │   │   ├── pdf_converter.py # PDF-to-image conversion (pdf2image)
+│   │   │   └── mock_pdf_generator.py  # Generate test images from text (for sample emails)
 │   │   ├── routers/             # API endpoints
 │   │   │   ├── cases.py
 │   │   │   ├── emails.py
@@ -375,6 +388,8 @@ triage/
 ├── docker-compose.yml
 ├── .env.example
 ├── EMAIL_INTEGRATION.md      # Email integration setup guide
+├── PDF_SETUP.md              # PDF processing setup guide (poppler-utils)
+├── CLAUDE.md                 # Claude Code guidance
 └── README.md
 ```
 
@@ -395,7 +410,7 @@ Primary entity representing an IME case:
 Source records that link to cases:
 - Stores raw email data (subject, sender, body, recipients)
 - `raw_extraction`: JSON blob of LLM response for debugging
-- `raw_email_data`: Original email with attachments (only saved on failure for retry)
+- `raw_email_data`: Complete email with **PDF images** (base64-encoded PNGs, not original PDF) - only saved on failure for retry
 - `processing_status`: pending | processing | processed | failed
 - `error_message`: Exception details for failed emails
 
@@ -447,9 +462,9 @@ Email attachments with categorization and storage:
 - **Professional Theme**: Blue/gray color scheme
 - **Sidebar Navigation**: Easy access to all pages
 
-## LLM Extraction
+## LLM Extraction & Vision Processing
 
-The system uses OpenAI's GPT-4o with structured output (function calling) to extract:
+The system uses OpenAI's GPT-4o Vision API with Structured Outputs (Messages API) to extract data from both email text and PDF images:
 
 **Required Fields:**
 - patient_name, case_number, exam_type, attachments
@@ -501,6 +516,43 @@ Missing critical information:
 Action needed: Contact referring party to obtain missing details.
 ```
 
+### PDF Vision Processing
+
+The system uses **pdf2image** + **poppler-utils** to convert PDF attachments into PNG images for vision-based extraction:
+
+**Why Vision Processing?**
+- Many medical documents are scanned or photographed (not text-based PDFs)
+- Handwritten forms with poor OCR quality
+- Rotated or angled text that traditional extraction can't handle
+- Tables, checkboxes, and visual layouts
+
+**How It Works:**
+1. **Email Received** → PDF attachment detected
+2. **PDF Converter** → Converts each page to PNG image @ 150 DPI (configurable)
+3. **Base64 Encoding** → Images encoded for API transmission
+4. **GPT-4o Vision** → LLM reads text from images
+5. **Structured Output** → Extracts patient data, dates, addresses, etc.
+
+**Token Costs** (per email with 4-page PDF):
+- Text only: ~500-1000 tokens (~$0.001)
+- With images (150 DPI, high detail): ~5000-6000 tokens (~$0.015)
+- Cost scales with page count and DPI setting
+
+**Attachment Preservation:**
+- ✅ **Successful processing**: PDF images discarded after extraction (storage optimization)
+- ✅ **Failed processing**: PDF images saved in `raw_email_data` (JSONB) for retry (~3MB per failed email)
+- ✅ **Manual retry**: Restores exact same images, no re-conversion needed
+
+**Configuration** (backend/.env):
+```bash
+PDF_CONVERSION_ENABLED=true       # Enable PDF vision processing
+PDF_CONVERSION_DPI=150            # 150=balanced, 300=high quality
+PDF_IMAGE_FORMAT=png              # png or jpeg
+VISION_IMAGE_DETAIL=high          # low, high, or auto
+```
+
+See [PDF_SETUP.md](PDF_SETUP.md) for detailed setup instructions and troubleshooting.
+
 ## Queue System & Reliability
 
 The system uses **Redis Queue (RQ)** with **SimpleWorker** for reliable, asynchronous email processing with automatic retries:
@@ -529,9 +581,10 @@ Deterministic  Persistent   Sequential      Auto-Retry
 - Handles transient failures (OpenAI API timeouts, rate limits)
 
 **Attachment Preservation on Failure**:
-- Failed emails save complete `raw_email_data` (JSONB) including attachments
-- Enables perfect replay on manual retry
-- Successful emails clear raw_email_data to save storage (~5KB per failed email only)
+- Failed emails save complete `raw_email_data` (JSONB) including **PDF images** (base64-encoded PNGs, not original PDF)
+- Enables perfect replay on manual retry without re-converting PDFs
+- Storage: ~3MB per failed email with 4-page PDF (images are larger than original PDF but ready for Vision API)
+- Successful emails clear raw_email_data to save storage (NULL for successful processing)
 
 **SimpleWorker Benefits**:
 - Cross-platform: Works identically on Windows, Linux, and macOS

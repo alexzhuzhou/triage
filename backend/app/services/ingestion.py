@@ -422,20 +422,37 @@ def batch_process_sample_emails(db: Session, sample_dir: str = "sample_emails") 
             with open(base_path / filename, 'r', encoding='utf-8') as f:
                 email_json = json.load(f)
 
-            # Convert to EmailIngest schema
+            # Convert to EmailIngest schema with mock PDF image generation
+            from app.services.mock_pdf_generator import generate_mock_pdf_images
+
+            attachments_with_images = []
+            for att in email_json.get('attachments', []):
+                att_data = {
+                    'filename': att['filename'],
+                    'content_type': att.get('content_type'),
+                    'text_content': att.get('text_content')
+                }
+
+                # Generate mock PDF images if this is a PDF with text content
+                if att.get('content_type') == 'application/pdf' and att.get('text_content'):
+                    try:
+                        pdf_images = generate_mock_pdf_images(
+                            text_content=att['text_content'],
+                            filename=att['filename']
+                        )
+                        att_data['pdf_images'] = pdf_images
+                        logger.info(f"Generated {len(pdf_images)} mock images for {att['filename']}")
+                    except Exception as e:
+                        logger.warning(f"Mock image generation failed for {att['filename']}: {e}")
+
+                attachments_with_images.append(AttachmentData(**att_data))
+
             email_data = EmailIngest(
                 subject=email_json['subject'],
                 sender=email_json['sender'],
                 recipients=email_json['recipients'],
                 body=email_json['body'],
-                attachments=[
-                    AttachmentData(
-                        filename=att['filename'],
-                        content_type=att.get('content_type'),
-                        text_content=att.get('text_content')
-                    )
-                    for att in email_json.get('attachments', [])
-                ],
+                attachments=attachments_with_images,
                 received_at=datetime.fromisoformat(email_json['received_at'].replace('Z', '+00:00')) if email_json.get('received_at') else None
             )
 
