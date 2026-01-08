@@ -251,32 +251,3 @@ def convert_pdf_to_images(
         raise PDFConversionError("Failed to convert any pages from PDF")
 
     return images
-
-
-def estimate_token_cost(num_pages: int, dpi: int = 150, detail: str = "high") -> int:
-    """
-    Estimate token cost for PDF images sent to vision API.
-
-    Based on OpenAI's vision pricing:
-    - High detail: ~765-2000 tokens per image depending on size
-    - Low detail: ~85 tokens per image
-
-    Args:
-        num_pages: Number of PDF pages
-        dpi: Image resolution (affects size)
-        detail: Vision API detail level ('low', 'high', 'auto')
-
-    Returns:
-        Estimated total tokens for all images
-    """
-    if detail == "low":
-        tokens_per_image = 85
-    elif detail == "high":
-        # At 150 DPI, typical letter-size page = ~1200x1600 pixels
-        # OpenAI charges based on tiles (512x512)
-        # 1200x1600 = ~6 tiles = ~1275 tokens
-        tokens_per_image = 1275 if dpi <= 150 else 2000
-    else:  # auto
-        tokens_per_image = 1000  # Average estimate
-
-    return num_pages * tokens_per_image

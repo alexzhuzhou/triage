@@ -177,21 +177,3 @@ Attachments:"""
 
     # Validate and return as Pydantic model
     return CaseExtraction(**extraction_dict)
-
-
-def validate_extraction_confidence(extraction: CaseExtraction) -> str:
-    """
-    Determine processing recommendation based on confidence threshold.
-
-    Args:
-        extraction: The case extraction result
-
-    Returns:
-        str: Recommendation ("auto_process", "needs_review", "requires_manual")
-    """
-    if extraction.confidence >= 0.8:
-        return "auto_process"
-    elif extraction.confidence >= 0.5:
-        return "needs_review"
-    else:
-        return "requires_manual"
