@@ -39,6 +39,7 @@ export interface Attachment {
   content_type: string | null;
   category: 'medical_records' | 'declaration' | 'cover_letter' | 'other';
   category_reason: string | null;
+  summary: string | null;
   content_preview: string | null;
   file_path: string | null;
   file_size: number | null;

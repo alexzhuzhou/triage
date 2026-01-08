@@ -355,7 +355,8 @@ def process_email(db: Session, email_data: EmailIngest) -> Email:
                     content_type=att_data.content_type,
                     content_preview=att_data.text_content[:500] if att_data.text_content else None,
                     category=AttachmentCategory(att_extraction.category),
-                    category_reason=att_extraction.category_reason
+                    category_reason=att_extraction.category_reason,
+                    summary=att_extraction.summary
                 )
                 db.add(attachment)
             else:

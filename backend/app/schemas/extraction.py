@@ -29,6 +29,9 @@ class AttachmentExtraction(BaseModel):
     category_reason: Optional[str] = Field(
         description="Explanation for categorization, especially for 'other' category"
     )
+    summary: str = Field(
+        description="Brief AI-generated summary (2-3 sentences) of the attachment content based on the PDF images or file content"
+    )
 
 
 class CaseExtraction(BaseModel):
@@ -58,7 +61,8 @@ class CaseExtraction(BaseModel):
                     {
                         "filename": "medical_records.pdf",
                         "category": "medical_records",
-                        "category_reason": None
+                        "category_reason": None,
+                        "summary": "Patient medical history from 2023-2024 including orthopedic evaluations and treatment records."
                     }
                 ]
             }

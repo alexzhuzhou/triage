@@ -48,6 +48,7 @@ class Attachment(Base):
     # Categorization (from LLM extraction)
     category = Column(Enum(AttachmentCategory), nullable=False)
     category_reason = Column(Text, nullable=True)  # Explanation for "other" category
+    summary = Column(Text, nullable=True)  # AI-generated summary (2-3 sentences)
 
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

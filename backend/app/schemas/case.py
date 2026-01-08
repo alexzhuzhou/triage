@@ -49,6 +49,7 @@ class AttachmentResponse(BaseModel):
     content_type: Optional[str]
     category: str
     category_reason: Optional[str]
+    summary: Optional[str] = None
     content_preview: Optional[str] = None
     file_path: Optional[str] = None
     file_size: Optional[int] = None

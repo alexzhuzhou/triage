@@ -38,13 +38,20 @@ Your task is to extract structured information from emails about IME referrals. 
 
 3. **Extract Key Data from Images**: Look for patient names, dates, case numbers, exam details, referring party information across all document pages.
 
-4. **Visual Attachment Categorization**: Categorize based on visual content, not just filename:
-   - medical_records: Doctor notes, lab results, imaging reports, treatment histories, prescription records
-   - declaration: Legal declarations, sworn statements, affidavits
-   - cover_letter: Referral letters, intake forms, cover sheets
-   - other: Everything else (provide category_reason)
+4. **Visual Attachment Categorization and Summarization**: For each attachment:
+   - **Categorize** based on visual content, not just filename:
+     * medical_records: Doctor notes, lab results, imaging reports, treatment histories, prescription records
+     * declaration: Legal declarations, sworn statements, affidavits
+     * cover_letter: Referral letters, intake forms, cover sheets
+     * other: Everything else (provide category_reason)
+   - **Generate Summary**: Create a brief 2-3 sentence summary of the attachment content. Focus on:
+     * Key medical findings, diagnoses, or treatment information (for medical records)
+     * Legal statements or declarations (for declarations)
+     * Referral details or case background (for cover letters)
+     * Main purpose and content (for other documents)
+     * Extract dates, doctor names, facilities mentioned if relevant
 
-5. **Cross-Reference Information**: If information appears in both email body and PDF images, prefer the email version (more authoritative and detailed).
+5. **Cross-Reference Information**: If information appears in both email body and PDF images, prefer the email body version unless images contain additional details.
 
 **General Guidelines:**
 

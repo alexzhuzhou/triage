@@ -418,6 +418,7 @@ Source records that link to cases:
 Email attachments with categorization and storage:
 - Links to both email (source) and case (for efficient querying)
 - `category`: medical_records | declaration | cover_letter | other
+- `summary`: AI-generated 2-3 sentence summary of document content
 - `content_preview`: First 500 characters (viewable in frontend modal)
 - **Storage fields** (for S3/cloud integration):
   - `file_path`: Cloud storage path (e.g., "s3://bucket/cases/NF-39281/file.pdf")
@@ -439,7 +440,10 @@ Email attachments with categorization and storage:
 - **Related Emails Section**: View all emails linked to the case
 - **Attachments Section**: Browse and preview attachments
 - **Email Preview Modal**: Click any email to view full content, metadata, and processing status
-- **Attachment Preview Modal**: Click any attachment to view content preview (first 500 chars)
+- **Attachment Preview Modal**: Click any attachment to view:
+  - **AI-Generated Summary**: 2-3 sentence summary of document content
+  - **Content Preview**: First 500 characters of text content
+  - **View Full PDF**: Button to access full document (ready for cloud storage integration)
 - **Confidence Badge**: Color-coded (green ≥0.8, yellow ≥0.5, red <0.5)
 - **Timestamps**: Created and updated dates
 
@@ -476,6 +480,12 @@ The system uses OpenAI's GPT-4o Vision API with Structured Outputs (Messages API
 - confidence (0-1): Quality assessment
 - extraction_notes: Ambiguities or uncertainties
 - email_intent: new_referral | scheduling_update | document_submission | inquiry | other
+
+**Attachment Processing:**
+For each attachment, the LLM extracts:
+- **Category**: medical_records | declaration | cover_letter | other
+- **Summary**: 2-3 sentence AI-generated summary of document content, including key medical findings, dates, and relevant details
+- **Category Reason**: Explanation for categorization (especially for 'other' category)
 
 ### Confidence Thresholds
 
