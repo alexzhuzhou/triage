@@ -2,14 +2,22 @@
 
 This guide shows how to deploy the Triage application **manually** without GitHub Actions CI/CD. This is simpler and requires fewer permissions.
 
+**⚠️ Common Pitfalls to Avoid:**
+- ❌ **Don't use `gcloud run services update --set-env-vars`** - it replaces ALL variables! Use `--update-env-vars` instead, or better yet, use Cloud Console UI
+- ❌ **Don't skip VPC connector setup** - worker won't be able to connect to Redis without it
+- ❌ **Don't use gcloud CLI for CORS** - comma escaping issues can break your config. Use Cloud Console UI
+- ❌ **Don't forget to clear worker registration** before redeploying worker (see Troubleshooting section)
+- ✅ **Do use repository name `triage-images`** not `triage`
+
 ---
 
 ## What You'll Do
 
-1. ✅ Grant service account Secret Manager access (admin needed)
-2. ✅ Deploy backend to Cloud Run (manual commands)
-3. ✅ Deploy frontend to Firebase Hosting (manual commands)
-4. ✅ Test the application
+1. ✅ Set up VPC networking for Redis access
+2. ✅ Grant service account Secret Manager access (admin needed)
+3. ✅ Deploy backend to Cloud Run (manual commands)
+4. ✅ Deploy frontend to Firebase Hosting (manual commands)
+5. ✅ Test the application
 
 **No need for:**
 - ❌ Workload Identity Federation
@@ -54,8 +62,8 @@ gcloud redis instances describe triage-redis \
 **Ask your admin to run this command:**
 
 ```bash
-gcloud projects add-iam-policy-binding premium-oven-394418 \
-  --member="serviceAccount:triage-cloudsql-sa@premium-oven-394418.iam.gserviceaccount.com" \
+gcloud projects add-iam-policy-binding YOUR_GCP_PROJECT_ID \
+  --member="serviceAccount:triage-cloudsql-sa@YOUR_GCP_PROJECT_ID.iam.gserviceaccount.com" \
   --role="roles/secretmanager.secretAccessor"
 ```
 
@@ -63,26 +71,64 @@ This allows the Cloud Run services to fetch `database-url` and `openai-api-key` 
 
 **Verify it worked:**
 ```bash
-gcloud projects get-iam-policy premium-oven-394418 \
+gcloud projects get-iam-policy YOUR_GCP_PROJECT_ID \
   --flatten="bindings[].members" \
-  --filter="bindings.members:triage-cloudsql-sa@premium-oven-394418.iam.gserviceaccount.com AND bindings.role:roles/secretmanager.secretAccessor"
+  --filter="bindings.members:triage-cloudsql-sa@YOUR_GCP_PROJECT_ID.iam.gserviceaccount.com AND bindings.role:roles/secretmanager.secretAccessor"
 ```
 
 Should show the binding.
 
 ---
 
-## Step 3: Deploy Backend to Cloud Run
+## Step 3: Set Up VPC Networking for Redis Access
+
+The worker service needs to access Memorystore Redis, which has a private IP. We need to create a VPC connector.
+
+### A. Enable VPC Access API
+
+```bash
+gcloud services enable vpcaccess.googleapis.com
+```
+
+### B. Create VPC Connector
+
+```bash
+gcloud compute networks vpc-access connectors create triage-connector \
+  --region=us-east4 \
+  --range=10.8.0.0/28 \
+  --network=default
+```
+
+This creates a connector that allows Cloud Run services to access private resources (like Redis).
+
+### C. Create Firewall Rule for Redis Access
+
+```bash
+gcloud compute firewall-rules create allow-vpc-connector-to-redis \
+  --network=default \
+  --direction=INGRESS \
+  --priority=1000 \
+  --source-ranges=10.8.0.0/28 \
+  --destination-ranges=10.108.76.144/29 \
+  --allow=tcp:6379 \
+  --description="Allow VPC connector to access Memorystore Redis"
+```
+
+Replace `10.108.76.144/29` with your actual Redis IP range (check with `gcloud redis instances describe triage-redis --region=us-east4 --format='value(reservedIpRange)'`).
+
+---
+
+## Step 4: Deploy Backend to Cloud Run
 
 ### A. Set Up Environment Variables
 
 ```bash
 # Set these once
-export GCP_PROJECT="premium-oven-394418"
+export GCP_PROJECT="YOUR_GCP_PROJECT_ID"
 export GCP_REGION="us-east4"
 export REDIS_HOST="10.x.x.x"  # Replace with actual IP from Step 1
-export SERVICE_ACCOUNT="triage-cloudsql-sa@premium-oven-394418.iam.gserviceaccount.com"
-export CLOUD_SQL_CONNECTION="premium-oven-394418:us-east4:triage-postgres"
+export SERVICE_ACCOUNT="triage-cloudsql-sa@YOUR_GCP_PROJECT_ID.iam.gserviceaccount.com"
+export CLOUD_SQL_CONNECTION="YOUR_GCP_PROJECT_ID:us-east4:triage-postgres"
 ```
 
 ### B. Build and Push Docker Images
@@ -99,12 +145,13 @@ gcloud builds submit \
   --timeout=20m \
   .
 
-# Build Worker image using Cloud Build
-gcloud builds submit \
-  --tag us-east4-docker.pkg.dev/${GCP_PROJECT}/triage-images/worker:latest \
-  --timeout=20m \
-  --dockerfile=Dockerfile.worker \
+# Build Worker image - gcloud builds submit doesn't support --dockerfile flag
+# So we use Docker directly in Cloud Shell
+docker build -f Dockerfile.worker \
+  -t us-east4-docker.pkg.dev/${GCP_PROJECT}/triage-images/worker:latest \
   .
+
+docker push us-east4-docker.pkg.dev/${GCP_PROJECT}/triage-images/worker:latest
 ```
 
 **Option 2: Build Locally (If you have Docker installed)**
@@ -172,6 +219,8 @@ You'll update this after setting up Firebase. For now, it allows localhost.
 
 ### F. Deploy Worker Service
 
+**IMPORTANT:** Worker needs VPC connector to access Redis.
+
 ```bash
 gcloud run deploy triage-worker \
   --image=us-east4-docker.pkg.dev/${GCP_PROJECT}/triage-images/worker:latest \
@@ -179,6 +228,8 @@ gcloud run deploy triage-worker \
   --region=${GCP_REGION} \
   --service-account=${SERVICE_ACCOUNT} \
   --add-cloudsql-instances=${CLOUD_SQL_CONNECTION} \
+  --vpc-connector=triage-connector \
+  --vpc-egress=private-ranges-only \
   --set-env-vars="ENV=production,REDIS_URL=redis://${REDIS_HOST}:6379/0,QUEUE_DEFAULT_TIMEOUT=600,QUEUE_RETRY_ATTEMPTS=5,PDF_CONVERSION_ENABLED=true,PDF_CONVERSION_DPI=150,VISION_IMAGE_DETAIL=high" \
   --cpu=1 \
   --memory=1Gi \
@@ -188,6 +239,10 @@ gcloud run deploy triage-worker \
   --max-instances=3 \
   --no-allow-unauthenticated
 ```
+
+**Key flags:**
+- `--vpc-connector=triage-connector` - Allows worker to access private Redis
+- `--vpc-egress=private-ranges-only` - Routes only private IPs through VPC connector (saves cost)
 
 When prompted about unauthenticated invocations, answer **N** (no) - the worker doesn't need public access.
 
@@ -222,7 +277,7 @@ If you see those messages, Secret Manager integration is working! ✅
 
 ---
 
-## Step 4: Set Up Firebase
+## Step 5: Set Up Firebase Hosting
 
 ### A. Create or Connect Firebase Project
 
@@ -239,39 +294,70 @@ If you see those messages, Secret Manager integration is working! ✅
 1. Go to [Firebase Console](https://console.firebase.google.com/)
 2. Click "Add project"
 3. Select "Enter a project name"
-4. In the dropdown, select **premium-oven-394418**
+4. In the dropdown, select **YOUR_GCP_PROJECT_ID**
 5. Click "Continue"
 6. Confirm billing plan
 7. Click "Add Firebase"
 
-### B. Enable Firebase Hosting
+### B. Create Firebase Hosting Site
 
-1. In Firebase Console → Build → Hosting
-2. Click "Get started"
-3. Follow the wizard (we already have firebase.json, so you can skip CLI steps)
+**IMPORTANT:** If you already have apps hosted on this Firebase project, create a new site:
 
-### C. Get Firebase Project ID
+```bash
+# Install Firebase CLI
+npm install -g firebase-tools
 
-In Firebase Console → Project Settings (gear icon), you'll see:
-- **Project ID**: `your-firebase-project-id` (save this)
+# Login to Firebase
+firebase login
 
-### D. Update `.firebaserc` Locally
+# Create a new hosting site (for multi-site hosting)
+firebase hosting:sites:create triage-ime --project=YOUR_GCP_PROJECT_ID
+```
+
+This creates a dedicated site: `https://triage-ime.web.app`
+
+### C. Update `.firebaserc` for Multi-Site Hosting
 
 ```bash
 cd frontend
 
-# Edit .firebaserc file
-# Replace "your-firebase-project-id" with actual project ID
-```
-
-Or use this command:
-
-```bash
-# Replace YOUR_FIREBASE_PROJECT_ID with actual ID
-cat > .firebaserc << EOF
+# Create .firebaserc with multi-site configuration
+cat > .firebaserc << 'EOF'
 {
   "projects": {
-    "default": "YOUR_FIREBASE_PROJECT_ID"
+    "default": "YOUR_GCP_PROJECT_ID"
+  },
+  "targets": {
+    "YOUR_GCP_PROJECT_ID": {
+      "hosting": {
+        "triage": ["triage-ime"]
+      }
+    }
+  }
+}
+EOF
+```
+
+### D. Update `firebase.json` to Use Target
+
+```bash
+# Update firebase.json to use the target
+cat > firebase.json << 'EOF'
+{
+  "hosting": {
+    "target": "triage",
+    "public": "dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
   }
 }
 EOF
@@ -279,7 +365,7 @@ EOF
 
 ---
 
-## Step 5: Deploy Frontend to Firebase Hosting
+## Step 6: Deploy Frontend to Firebase Hosting
 
 ### A. Install Dependencies
 
@@ -339,24 +425,41 @@ Hosting URL: https://your-project.web.app
 
 ---
 
-## Step 6: Update CORS for Production
+## Step 7: Update CORS for Production
 
-Now that you have the Firebase Hosting URL, update the backend CORS configuration:
+Now that you have the Firebase Hosting URL, update the backend CORS configuration.
+
+**⚠️ IMPORTANT:** Use the Cloud Console UI to update CORS, NOT gcloud CLI. The CLI has issues with comma escaping that can break your environment variables.
+
+### Update CORS via Cloud Console (Recommended)
+
+1. Go to [Cloud Run Console](https://console.cloud.google.com/run?project=YOUR_GCP_PROJECT_ID)
+2. Click **triage-api** service
+3. Click **EDIT & DEPLOY NEW REVISION** at the top
+4. Scroll to **Container → Variables & Secrets**
+5. Find `ALLOWED_ORIGINS` and click Edit
+6. Update value to:
+   ```
+   https://triage-ime.web.app,https://triage-ime.firebaseapp.com,http://localhost:5173
+   ```
+7. Click **DEPLOY**
+
+### Alternative: Update via gcloud CLI (Advanced)
+
+If you must use CLI, be very careful with escaping:
 
 ```bash
-# Set your Firebase hosting URLs
-FIREBASE_URL="https://your-project.web.app"
-FIREBASE_URL_2="https://your-project.firebaseapp.com"
-
-# Update API with new CORS origins
+# This works on Linux/Mac, may fail on Windows
 gcloud run services update triage-api \
-  --region=${GCP_REGION} \
-  --update-env-vars="ALLOWED_ORIGINS=${FIREBASE_URL},${FIREBASE_URL_2},http://localhost:5173"
+  --region=us-east4 \
+  --set-env-vars="^@^ALLOWED_ORIGINS=https://triage-ime.web.app,https://triage-ime.firebaseapp.com,http://localhost:5173"
 ```
+
+**Note:** If the CLI command fails or removes other environment variables, use the Cloud Console method instead.
 
 ---
 
-## Step 7: Test End-to-End
+## Step 8: Test End-to-End
 
 ### A. Open Frontend in Browser
 
@@ -401,7 +504,7 @@ In the frontend:
 
 ---
 
-## Step 8: Future Deployments (Manual Process)
+## Step 9: Future Deployments (Manual Process)
 
 ### When You Make Backend Changes
 
@@ -419,11 +522,18 @@ gcloud run deploy triage-api \
   --region=${GCP_REGION}
 
 # 3. Rebuild and deploy Worker (if worker code changed)
-gcloud builds submit \
-  --tag us-east4-docker.pkg.dev/${GCP_PROJECT}/triage-images/worker:latest \
-  --dockerfile=Dockerfile.worker \
+# NOTE: See "Worker Redeployment Issue" below if deployment fails
+
+docker build -f Dockerfile.worker \
+  -t us-east4-docker.pkg.dev/${GCP_PROJECT}/triage-images/worker:latest \
   .
 
+docker push us-east4-docker.pkg.dev/${GCP_PROJECT}/triage-images/worker:latest
+
+# Before deploying worker, clear Redis worker registration to avoid conflicts
+curl -X POST ${API_URL}/queue/admin/clear-workers
+
+# Now deploy the worker
 gcloud run deploy triage-worker \
   --image=us-east4-docker.pkg.dev/${GCP_PROJECT}/triage-images/worker:latest \
   --region=${GCP_REGION}
@@ -455,20 +565,50 @@ gcloud run services logs tail triage-worker --region=${GCP_REGION}
 
 # View recent logs
 gcloud run services logs read triage-api --region=${GCP_REGION} --limit=100
+
+# View logs for specific revision (useful if latest revision failed)
+# First, list revisions to find the working one
+gcloud run revisions list --service=triage-worker --region=${GCP_REGION}
+
+# Then view logs for that specific revision
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=triage-worker AND resource.labels.revision_name=triage-worker-00002-c2x" \
+  --limit=50 \
+  --format="table(timestamp,textPayload)"
 ```
 
 ### Update Environment Variables
 
 ```bash
+# ⚠️ IMPORTANT: Always use --update-env-vars (NOT --set-env-vars)
+# --set-env-vars REPLACES all variables, --update-env-vars modifies specific ones
+
 # Update single variable
 gcloud run services update triage-api \
   --region=${GCP_REGION} \
   --update-env-vars="NEW_VAR=value"
 
-# Update multiple variables
+# Update multiple variables (be careful with comma escaping!)
+# RECOMMENDED: Use Cloud Console UI instead for comma-separated values
 gcloud run services update triage-api \
   --region=${GCP_REGION} \
   --update-env-vars="VAR1=value1,VAR2=value2"
+```
+
+### Manage Worker Registrations
+
+```bash
+# Check queue health and worker status
+curl ${API_URL}/queue/health | python3 -m json.tool
+
+# Clear worker registrations before redeploying worker
+# This prevents "worker already exists" errors
+curl -X POST ${API_URL}/queue/admin/clear-workers | python3 -m json.tool
+
+# View queue status
+curl ${API_URL}/queue/status | python3 -m json.tool
+
+# View failed jobs
+curl ${API_URL}/queue/failed-jobs | python3 -m json.tool
 ```
 
 ### View Service Status
@@ -514,6 +654,64 @@ gcloud run services update triage-worker --region=${GCP_REGION} --no-traffic
 
 ## Troubleshooting
 
+### Worker Redeployment Issue: "worker already exists"
+
+**Error:** `ValueError: There exists an active worker named 'worker-production' already`
+
+**Cause:** The current worker is registered in Redis. New deployments can't start because Redis sees an active worker with the same name.
+
+**Solution:**
+```bash
+# Clear worker registrations from Redis before redeploying
+curl -X POST https://YOUR-API-URL.run.app/queue/admin/clear-workers
+
+# Now redeploy the worker
+gcloud run deploy triage-worker \
+  --image=us-east4-docker.pkg.dev/${GCP_PROJECT}/triage-images/worker:latest \
+  --region=${GCP_REGION}
+```
+
+### Worker Can't Connect to Redis: Timeout Error
+
+**Error:** `TimeoutError: Timeout connecting to server` in worker logs
+
+**Cause:** Worker doesn't have VPC connector configured, can't access private Redis IP.
+
+**Solution:**
+```bash
+# Add VPC connector to worker
+gcloud run services update triage-worker \
+  --region=${GCP_REGION} \
+  --vpc-connector=triage-connector \
+  --vpc-egress=private-ranges-only
+```
+
+### Viewing Logs for Specific Revision
+
+**Problem:** Cloud Console shows latest (failed) revision logs by default.
+
+**Solution 1 - Cloud Console:**
+1. Go to Cloud Run → triage-worker → LOGS tab
+2. Click the revision dropdown at the top
+3. Select the working revision (e.g., `triage-worker-00002-c2x`)
+
+**Solution 2 - Direct URL:**
+Replace `REVISION_NAME` with your working revision:
+```
+https://console.cloud.google.com/logs/query;query=resource.type%3D%22cloud_run_revision%22%0Aresource.labels.service_name%3D%22triage-worker%22%0Aresource.labels.revision_name%3D%22REVISION_NAME%22?project=YOUR_GCP_PROJECT_ID
+```
+
+**Solution 3 - gcloud CLI:**
+```bash
+# List revisions to find the working one
+gcloud run revisions list --service=triage-worker --region=${GCP_REGION}
+
+# View logs for specific revision (replace REVISION_NAME)
+gcloud logging read "resource.type=cloud_run_revision AND resource.labels.service_name=triage-worker AND resource.labels.revision_name=REVISION_NAME" \
+  --limit=50 \
+  --format="table(timestamp,textPayload)"
+```
+
 ### Secret Manager Permission Denied
 
 **Error:** `Permission 'secretmanager.secrets.access' denied`
@@ -521,9 +719,9 @@ gcloud run services update triage-worker --region=${GCP_REGION} --no-traffic
 **Solution:**
 ```bash
 # Verify service account has accessor role
-gcloud projects get-iam-policy premium-oven-394418 \
+gcloud projects get-iam-policy YOUR_GCP_PROJECT_ID \
   --flatten="bindings[].members" \
-  --filter="bindings.members:triage-cloudsql-sa@premium-oven-394418.iam.gserviceaccount.com"
+  --filter="bindings.members:triage-cloudsql-sa@YOUR_GCP_PROJECT_ID.iam.gserviceaccount.com"
 ```
 
 Should show `roles/secretmanager.secretAccessor`. If not, ask admin to grant it (Step 2).
@@ -537,20 +735,29 @@ gcloud run services logs read triage-api --region=${GCP_REGION} --limit=50
 
 Common issues:
 - **Database connection failed** → Check Cloud SQL connection name
-- **Redis connection failed** → Check REDIS_HOST IP
+- **Redis connection failed** → Check REDIS_HOST IP and VPC connector
 - **Secret not found** → Verify secrets exist in Secret Manager
+- **Health check timeout** → Check if service listens on PORT=8080
 
 ### CORS Errors in Browser
 
 **Symptom:** Frontend can't connect to API, browser shows CORS error
 
-**Solution:**
-```bash
-# Update ALLOWED_ORIGINS with your Firebase URL
-gcloud run services update triage-api \
-  --region=${GCP_REGION} \
-  --update-env-vars="ALLOWED_ORIGINS=https://your-project.web.app,https://your-project.firebaseapp.com,http://localhost:5173"
-```
+**Solution:** Use Cloud Console UI (Step 7) to update ALLOWED_ORIGINS. **Do NOT use gcloud CLI** - it has escaping issues that can break your environment variables.
+
+### CORS Update Removed Other Environment Variables
+
+**Problem:** After running `gcloud run services update --set-env-vars`, other environment variables disappeared.
+
+**Cause:** `--set-env-vars` **replaces all** environment variables, not just the ones you specify.
+
+**Solution:** Always use `--update-env-vars` to modify individual variables, or use the Cloud Console UI.
+
+### Environment Variable Escaping Issues with gcloud
+
+**Problem:** Comma-separated values in environment variables get mangled by gcloud CLI.
+
+**Solution:** Use the Cloud Console UI to edit environment variables instead of CLI. See Step 7 for instructions.
 
 ### Frontend Shows Wrong API URL
 
@@ -569,6 +776,17 @@ If wrong, update and rebuild:
 echo "VITE_API_BASE_URL=${API_URL}" > frontend/.env.production
 npm run build
 firebase deploy --only hosting
+```
+
+### Email Polling Causes Startup Timeout
+
+**Error:** Container failed to start when EMAIL_ENABLED=true
+
+**Cause:** IMAP connection blocks startup health check
+
+**Solution:** Set EMAIL_ENABLED=false for automatic polling. Use manual poll endpoint instead:
+```bash
+curl -X POST ${API_URL}/email-polling/manual-poll -H "Content-Type: application/json" -d '{}'
 ```
 
 ---
@@ -597,17 +815,23 @@ Breakdown:
 
 - [ ] Get Redis host IP
 - [ ] Grant service account Secret Manager access (admin)
+- [ ] Enable VPC Access API
+- [ ] Create VPC connector (triage-connector)
+- [ ] Create firewall rule for Redis access
 - [ ] Build and push Docker images (API + Worker)
 - [ ] Deploy API to Cloud Run
-- [ ] Deploy Worker to Cloud Run
+- [ ] Deploy Worker to Cloud Run with VPC connector
 - [ ] Get API URL
 - [ ] Set up Firebase project
-- [ ] Update `.firebaserc` with project ID
+- [ ] Create Firebase Hosting site (triage-ime)
+- [ ] Update `.firebaserc` for multi-site hosting
+- [ ] Update `firebase.json` with target
 - [ ] Build frontend with API URL
 - [ ] Deploy frontend to Firebase Hosting
-- [ ] Update CORS with Firebase URLs
+- [ ] Update CORS with Firebase URLs (use Cloud Console UI)
 - [ ] Test end-to-end (process emails, view cases)
 - [ ] Verify Secret Manager in logs
+- [ ] Verify worker can connect to Redis
 - [ ] Set up billing alerts
 
 **Once all checkboxes are complete, your application is fully deployed!**

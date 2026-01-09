@@ -16,9 +16,10 @@ openai==1.12.0
 python-dotenv==1.0.0
 python-multipart==0.0.6
 
-# Google Cloud (Secret Manager for production)
+# Google Cloud (Secret Manager & Storage for production)
 google-auth==2.27.0
 google-cloud-secret-manager==2.18.2
+google-cloud-storage==2.14.0
 
 # PDF Processing
 pdf2image==1.17.0  # Requires poppler-utils system dependency

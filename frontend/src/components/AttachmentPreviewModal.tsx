@@ -86,11 +86,10 @@ export function AttachmentPreviewModal({
         <div className="flex items-center justify-between p-6 border-t">
           <div className="flex items-center space-x-3">
             {attachment.file_path ? (
-              <button
-                onClick={() => {
-                  // TODO: Implement cloud storage PDF viewing
-                  alert('Cloud storage integration coming soon! This will open the full PDF document.');
-                }}
+              <a
+                href={`${import.meta.env.VITE_API_BASE_URL || '/api'}/attachments/${attachment.id}/download`}
+                target="_blank"
+                rel="noopener noreferrer"
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
               >
                 <svg
@@ -107,7 +106,7 @@ export function AttachmentPreviewModal({
                   />
                 </svg>
                 <span>View Full PDF</span>
-              </button>
+              </a>
             ) : (
               <div className="text-sm text-gray-500 italic">
                 Full document will be available when cloud storage is configured

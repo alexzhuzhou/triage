@@ -4,11 +4,13 @@ Attachment API endpoints.
 from typing import List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.attachment import Attachment
 from app.schemas.case import AttachmentResponse
+from app.services.gcs_storage import get_gcs_service
 
 router = APIRouter(prefix="/attachments", tags=["attachments"])
 
@@ -109,3 +111,48 @@ def get_case_attachments(
     attachments = query.order_by(Attachment.created_at.desc()).all()
 
     return attachments
+
+
+@router.get("/{attachment_id}/download")
+def download_attachment(attachment_id: UUID, db: Session = Depends(get_db)):
+    """
+    Generate a temporary signed URL for downloading an attachment from Google Cloud Storage.
+
+    Returns a redirect to the signed URL, which is valid for 60 minutes.
+
+    Path parameter:
+    - attachment_id: UUID of the attachment
+
+    Raises:
+    - 404: Attachment not found
+    - 400: Attachment not stored in cloud storage
+    - 500: Failed to generate signed URL
+    """
+    # Get attachment from database
+    attachment = db.query(Attachment).filter(Attachment.id == attachment_id).first()
+
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
+    # Check if file is stored in cloud storage
+    if not attachment.file_path:
+        raise HTTPException(
+            status_code=400,
+            detail="Attachment not available in cloud storage. File may not have been uploaded."
+        )
+
+    # Generate signed URL
+    gcs_service = get_gcs_service()
+    signed_url = gcs_service.generate_signed_url(
+        file_path=attachment.file_path,
+        expiration_minutes=60
+    )
+
+    if not signed_url:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to generate download URL. Please try again later."
+        )
+
+    # Redirect to signed URL
+    return RedirectResponse(url=signed_url)

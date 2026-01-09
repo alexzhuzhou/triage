@@ -223,3 +223,42 @@ def queue_health() -> Dict[str, Any]:
             "error": str(e),
             "message": "Cannot connect to Redis or queue system"
         }
+
+
+@router.post("/admin/clear-workers")
+def clear_worker_registrations() -> Dict[str, Any]:
+    """
+    ADMIN: Clear all worker registrations from Redis.
+
+    Use this before redeploying workers to avoid "worker already exists" errors.
+    This is safe to call - workers will re-register when they start.
+
+    Returns:
+        Counts of cleared registrations
+    """
+    try:
+        redis_conn = get_redis_connection()
+
+        # Get all worker keys
+        worker_keys = redis_conn.keys("rq:worker:*")
+
+        # Delete worker keys
+        deleted_workers = 0
+        if worker_keys:
+            deleted_workers = redis_conn.delete(*worker_keys)
+
+        # Clear workers set
+        workers_set = redis_conn.smembers("rq:workers")
+        cleared_set = False
+        if workers_set:
+            redis_conn.delete("rq:workers")
+            cleared_set = True
+
+        return {
+            "success": True,
+            "deleted_worker_keys": deleted_workers,
+            "cleared_workers_set": cleared_set,
+            "message": "Worker registrations cleared. You can now redeploy the worker service."
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clear workers: {str(e)}")

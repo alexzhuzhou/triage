@@ -4,7 +4,8 @@ Pydantic schemas for Email API.
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer, field_validator
+import base64
 
 
 class AttachmentData(BaseModel):
@@ -13,6 +14,27 @@ class AttachmentData(BaseModel):
     content_type: Optional[str] = None
     text_content: Optional[str] = None  # For text files
     pdf_images: Optional[List[str]] = None  # Base64-encoded PNG images for PDFs (one per page)
+    binary_content: Optional[bytes] = None  # Original file content for GCS upload
+
+    @field_validator('binary_content', mode='before')
+    @classmethod
+    def deserialize_binary(cls, value):
+        """Deserialize binary content from base64 string."""
+        if value is None:
+            return None
+        if isinstance(value, bytes):
+            return value  # Already bytes
+        if isinstance(value, str):
+            # Deserialize from base64 string
+            return base64.b64decode(value)
+        return value
+
+    @field_serializer('binary_content')
+    def serialize_binary(self, value: Optional[bytes]) -> Optional[str]:
+        """Serialize binary content to base64 for JSON compatibility."""
+        if value is None:
+            return None
+        return base64.b64encode(value).decode('utf-8')
 
 
 class EmailIngest(BaseModel):

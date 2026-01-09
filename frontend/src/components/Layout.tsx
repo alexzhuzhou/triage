@@ -1,6 +1,11 @@
+import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import clsx from 'clsx';
 import logo from '../assets/logo-no-background.svg';
+import axios from 'axios';
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -29,6 +34,28 @@ const navigation = [
 
 export function Layout({ children }: LayoutProps) {
   const location = useLocation();
+  const [isPolling, setIsPolling] = useState(false);
+
+  const handleManualPoll = async () => {
+    setIsPolling(true);
+    try {
+      const response = await axios.post(`${API_BASE_URL}/email-polling/manual-poll`);
+      const data = response.data;
+
+      toast.success(
+        `Poll completed! Fetched ${data.emails_fetched} emails, ${data.emails_processed} processed successfully`,
+        { duration: 5000 }
+      );
+    } catch (error: any) {
+      console.error('Manual poll error:', error);
+      toast.error(
+        error?.response?.data?.detail || 'Failed to poll emails. Check if email integration is enabled.',
+        { duration: 6000 }
+      );
+    } finally {
+      setIsPolling(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -83,18 +110,41 @@ export function Layout({ children }: LayoutProps) {
 
           {/* Footer */}
           <div className="p-5 space-y-4 border-t border-gray-100 bg-gradient-to-br from-orange-50/30 to-amber-50/20">
-            <button className="w-full group flex items-center justify-center gap-3 px-5 py-4 text-base font-bold text-white bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 rounded-2xl transition-all duration-200 shadow-lg shadow-orange-500/30 hover:shadow-xl hover:shadow-orange-600/40 hover:-translate-y-0.5 active:translate-y-0">
-              <svg className="w-6 h-6 group-hover:scale-110 group-hover:rotate-12 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>System Status</span>
+            {/* Manual Poll Button */}
+            <button
+              onClick={handleManualPoll}
+              disabled={isPolling}
+              className={clsx(
+                'w-full px-4 py-3 rounded-xl font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-2',
+                isPolling
+                  ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                  : 'bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700 hover:shadow-lg hover:shadow-orange-500/30'
+              )}
+            >
+              {isPolling ? (
+                <>
+                  <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Polling...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 19v-8.93a2 2 0 01.89-1.664l7-4.666a2 2 0 012.22 0l7 4.666A2 2 0 0121 10.07V19M3 19a2 2 0 002 2h14a2 2 0 002-2M3 19l6.75-4.5M21 19l-6.75-4.5M3 10l6.75 4.5M21 10l-6.75 4.5m0 0l-1.14.76a2 2 0 01-2.22 0l-1.14-.76" />
+                  </svg>
+                  Poll Emails
+                </>
+              )}
             </button>
+
             <div className="text-center px-2 py-3 bg-white/80 rounded-xl border border-orange-100">
               <p className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
-                IME Case Management
+                Case Management
               </p>
               <p className="text-xs text-gray-500 mt-1 font-medium">
-                v1.0.0 • Online
+                Online
               </p>
             </div>
           </div>

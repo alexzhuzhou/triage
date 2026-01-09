@@ -106,3 +106,27 @@ def get_case_by_number(case_number: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail=f"Case {case_number} not found")
 
     return case
+
+
+@router.delete("/{case_id}")
+def delete_case(case_id: UUID, db: Session = Depends(get_db)):
+    """
+    Delete a case and all associated emails and attachments.
+
+    WARNING: This is a permanent operation and cannot be undone.
+    All related data (emails, attachments) will also be deleted due to CASCADE.
+    """
+    case = db.query(Case).filter(Case.id == case_id).first()
+
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+
+    # Delete the case (CASCADE will handle related emails and attachments)
+    db.delete(case)
+    db.commit()
+
+    return {
+        "message": "Case deleted successfully",
+        "case_id": str(case_id),
+        "case_number": case.case_number
+    }

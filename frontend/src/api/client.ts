@@ -43,6 +43,11 @@ export const casesApi = {
     const { data } = await apiClient.patch<Case>(`/cases/${id}`, updates);
     return data;
   },
+
+  delete: async (id: string) => {
+    const { data } = await apiClient.delete<{ message: string; case_id: string; case_number: string }>(`/cases/${id}`);
+    return data;
+  },
 };
 
 export const emailsApi = {

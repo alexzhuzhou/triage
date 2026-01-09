@@ -205,7 +205,8 @@ class EmailParser:
                             filename=filename,
                             content_type=content_type,
                             text_content=text_content,
-                            pdf_images=pdf_images
+                            pdf_images=pdf_images,
+                            binary_content=payload  # Store original binary for GCS upload
                         ))
 
         except Exception as e:

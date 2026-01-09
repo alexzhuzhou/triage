@@ -100,6 +100,11 @@ class Settings(BaseSettings):
     # CORS Configuration
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://localhost:5173"  # Comma-separated list of allowed origins
 
+    # Google Cloud Storage
+    GCS_ENABLED: bool = True  # Enable/disable GCS upload
+    GCP_PROJECT_ID: str = ""  # GCP project ID (e.g., "premium-oven-394418")
+    GCS_BUCKET_NAME: str = ""  # GCS bucket name for attachments (e.g., "triage-attachments")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

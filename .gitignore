@@ -40,5 +40,8 @@ Thumbs.db
 cloud-sql-proxy.exe
 cloud-sql-proxy
 
+# Firebase hosting cache
+frontend/.firebase/
+
 .claude/
 CLAUDE.md

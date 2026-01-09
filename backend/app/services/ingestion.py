@@ -10,6 +10,7 @@ This service:
 from datetime import datetime, date, time as time_type
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
+import logging
 
 from app.models.case import Case, CaseStatus
 from app.models.email import Email, EmailProcessingStatus
@@ -17,6 +18,10 @@ from app.models.attachment import Attachment, AttachmentCategory
 from app.schemas.email import EmailIngest, AttachmentData
 from app.schemas.extraction import CaseExtraction
 from app.services.extraction import extract_case_from_email
+from app.services.gcs_storage import get_gcs_service
+from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def find_or_create_case(
@@ -348,6 +353,25 @@ def process_email(db: Session, email_data: EmailIngest) -> Email:
             ).first()
 
             if not existing_att:
+                # Upload to GCS if enabled and binary content is available
+                gcs_metadata = None
+                if settings.GCS_ENABLED and att_data.binary_content:
+                    try:
+                        gcs_service = get_gcs_service()
+                        gcs_metadata = gcs_service.upload_attachment(
+                            file_data=att_data.binary_content,
+                            case_number=case.case_number,
+                            filename=att_data.filename,
+                            content_type=att_data.content_type or "application/octet-stream"
+                        )
+                        if gcs_metadata:
+                            logger.info(f"Uploaded {att_data.filename} to GCS: {gcs_metadata['file_path']}")
+                        else:
+                            logger.warning(f"GCS upload returned None for {att_data.filename}")
+                    except Exception as gcs_error:
+                        logger.error(f"GCS upload error for {att_data.filename}: {gcs_error}")
+                        # Continue without GCS - attachment will be saved without file_path
+
                 attachment = Attachment(
                     email_id=email.id,
                     case_id=case.id,
@@ -356,7 +380,11 @@ def process_email(db: Session, email_data: EmailIngest) -> Email:
                     content_preview=att_data.text_content[:500] if att_data.text_content else None,
                     category=AttachmentCategory(att_extraction.category),
                     category_reason=att_extraction.category_reason,
-                    summary=att_extraction.summary
+                    summary=att_extraction.summary,
+                    # GCS metadata (if upload succeeded)
+                    file_path=gcs_metadata["file_path"] if gcs_metadata else None,
+                    file_size=gcs_metadata["file_size"] if gcs_metadata else None,
+                    storage_provider=gcs_metadata["storage_provider"] if gcs_metadata else None
                 )
                 db.add(attachment)
             else:

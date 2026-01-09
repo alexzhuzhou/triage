@@ -7,6 +7,7 @@ No OAuth required - uses app passwords for simplified authentication.
 import imaplib
 import email
 from email.message import Message
+from email import policy
 from typing import List, Optional
 from datetime import datetime
 import logging
@@ -104,9 +105,10 @@ class EmailFetcher:
                         logger.warning(f"Failed to fetch email {email_id}")
                         continue
 
-                    # Parse email
+                    # Parse email with robust error handling policy
                     raw_email = msg_data[0][1]
-                    email_message = email.message_from_bytes(raw_email)
+                    # Use policy that replaces invalid characters instead of raising errors
+                    email_message = email.message_from_bytes(raw_email, policy=policy.default)
                     emails.append(email_message)
 
                     # Mark as read if requested
@@ -167,8 +169,9 @@ class EmailFetcher:
                     if status != 'OK':
                         continue
 
+                    # Parse email with robust error handling policy
                     raw_email = msg_data[0][1]
-                    email_message = email.message_from_bytes(raw_email)
+                    email_message = email.message_from_bytes(raw_email, policy=policy.default)
                     emails.append(email_message)
 
                 except Exception as e:

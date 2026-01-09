@@ -47,7 +47,7 @@ export function Dashboard() {
         <div>
           <h1 className="text-4xl font-bold text-gray-900 tracking-tight">Cases Dashboard</h1>
           <p className="mt-3 text-lg text-gray-600">
-            Manage and monitor IME cases
+            Manage and monitor medical cases
           </p>
         </div>
 

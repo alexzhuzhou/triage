@@ -1,22 +1,42 @@
 import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import { useCase, useUpdateCase } from '../hooks/useCases';
+import { casesApi } from '../api/client';
 import { LoadingSpinner } from '../components/LoadingSpinner';
 import { ConfidenceBadge } from '../components/ConfidenceBadge';
 import { StatusBadge } from '../components/StatusBadge';
 import { CategoryBadge } from '../components/CategoryBadge';
 import { AttachmentPreviewModal } from '../components/AttachmentPreviewModal';
 import { EmailPreviewModal } from '../components/EmailPreviewModal';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { formatDateOnly } from '../utils/dateUtils';
 import type { Attachment, Email } from '../types';
 
 export function CaseDetail() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data: caseData, isLoading, error } = useCase(id!);
   const updateCase = useUpdateCase();
 
   const [isEditing, setIsEditing] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+
+  // Delete mutation
+  const deleteCase = useMutation({
+    mutationFn: () => casesApi.delete(id!),
+    onSuccess: (data) => {
+      toast.success(`Case ${data.case_number} deleted successfully`);
+      queryClient.invalidateQueries({ queryKey: ['cases'] });
+      navigate('/');
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.detail || 'Failed to delete case');
+    },
+  });
+
   const [editForm, setEditForm] = useState({
     patient_name: '',
     exam_type: '',
@@ -133,6 +153,19 @@ export function CaseDetail() {
     }
   };
 
+  const handleDelete = () => {
+    setShowDeleteDialog(true);
+  };
+
+  const confirmDelete = () => {
+    deleteCase.mutate();
+    setShowDeleteDialog(false);
+  };
+
+  const cancelDelete = () => {
+    setShowDeleteDialog(false);
+  };
+
   if (isLoading) return <LoadingSpinner />;
 
   if (error || !caseData) {
@@ -188,15 +221,27 @@ export function CaseDetail() {
             )}
           </div>
           {!isEditing && (
-            <button
-              onClick={handleEdit}
-              className="px-7 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-all shadow-md font-semibold text-base flex items-center gap-2"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-              Edit Case
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleDelete}
+                className="px-7 py-3 bg-red-500 text-white rounded-xl hover:bg-red-600 transition-all shadow-md font-semibold text-base flex items-center gap-2 group"
+                disabled={deleteCase.isPending}
+              >
+                <svg className="w-5 h-5 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                {deleteCase.isPending ? 'Deleting...' : 'Delete'}
+              </button>
+              <button
+                onClick={handleEdit}
+                className="px-7 py-3 bg-orange-500 text-white rounded-xl hover:bg-orange-600 transition-all shadow-md font-semibold text-base flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                Edit Case
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -623,6 +668,18 @@ export function CaseDetail() {
           onClose={() => setPreviewEmail(null)}
         />
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteDialog}
+        title="Delete Case?"
+        message={`Are you sure you want to delete case ${caseData.case_number}? This action cannot be undone. All associated emails and attachments will be permanently deleted.`}
+        confirmText="Delete Case"
+        cancelText="Cancel"
+        onConfirm={confirmDelete}
+        onCancel={cancelDelete}
+        isDestructive={true}
+      />
     </div>
   );
 }
