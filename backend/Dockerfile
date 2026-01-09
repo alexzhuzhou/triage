@@ -23,6 +23,7 @@ USER appuser
 
 # Cloud Run uses PORT environment variable
 ENV PORT=8000
+
 EXPOSE 8000
 
 # Health check

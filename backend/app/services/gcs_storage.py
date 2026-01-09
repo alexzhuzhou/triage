@@ -4,10 +4,14 @@ Google Cloud Storage service for attachment management.
 Handles uploading attachments to GCS and generating signed URLs for secure downloads.
 """
 import logging
+import os
+import json
+import tempfile
 from typing import Optional
 from datetime import timedelta
 from google.cloud import storage
 from google.cloud.exceptions import GoogleCloudError
+from google.oauth2 import service_account
 
 from app.config import settings
 
@@ -20,12 +24,46 @@ class GCSStorageService:
     def __init__(self):
         """Initialize GCS client."""
         try:
-            self.client = storage.Client(project=settings.GCP_PROJECT_ID)
+            # Step 1: Create a temporary client with default credentials to download the signing key
+            logger.info("Creating temporary GCS client with default credentials to fetch signing key...")
+            temp_client = storage.Client(project=settings.GCP_PROJECT_ID)
+
+            # Step 2: Download the service account key from GCS
+            credentials_blob_path = "credentials/gcs-key.json"
+            logger.info(f"Downloading signing key from gs://{settings.GCS_BUCKET_NAME}/{credentials_blob_path}")
+
+            try:
+                bucket = temp_client.bucket(settings.GCS_BUCKET_NAME)
+                blob = bucket.blob(credentials_blob_path)
+                credentials_json = blob.download_as_text()
+                logger.info("Successfully downloaded service account key from GCS")
+
+                # Step 3: Load credentials from the downloaded JSON
+                credentials_dict = json.loads(credentials_json)
+                credentials = service_account.Credentials.from_service_account_info(
+                    credentials_dict,
+                    scopes=['https://www.googleapis.com/auth/cloud-platform']
+                )
+                logger.info(f"Loaded service account credentials: {credentials_dict.get('client_email')}")
+
+                # Step 4: Create the real client with signing credentials
+                self.client = storage.Client(
+                    project=settings.GCP_PROJECT_ID,
+                    credentials=credentials
+                )
+                logger.info("GCS client initialized with signing credentials - signed URLs will work!")
+
+            except Exception as download_error:
+                logger.error(f"Failed to download signing key from GCS: {download_error}")
+                logger.warning("Falling back to default credentials (signed URLs will NOT work)")
+                self.client = temp_client
+
             self.bucket_name = settings.GCS_BUCKET_NAME
             self.bucket = self.client.bucket(self.bucket_name)
-            logger.info(f"GCS client initialized for bucket: {self.bucket_name}")
+            logger.info(f"GCS service ready for bucket: {self.bucket_name}")
+
         except Exception as e:
-            logger.error(f"Failed to initialize GCS client: {e}")
+            logger.error(f"Failed to initialize GCS client: {e}", exc_info=True)
             self.client = None
             self.bucket = None
 

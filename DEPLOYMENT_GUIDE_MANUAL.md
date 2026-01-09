@@ -316,33 +316,30 @@ firebase hosting:sites:create triage-ime --project=YOUR_GCP_PROJECT_ID
 
 This creates a dedicated site: `https://triage-ime.web.app`
 
-### C. Update `.firebaserc` for Multi-Site Hosting
+### C. Configure Firebase for Your Project
 
-```bash
-cd frontend
+**Option 1: Manual File Edit (Recommended)**
 
-# Create .firebaserc with multi-site configuration
-cat > .firebaserc << 'EOF'
+Edit `frontend/.firebaserc` and replace `YOUR_GCP_PROJECT_ID` with `premium-oven-394418`:
+
+```json
 {
   "projects": {
-    "default": "YOUR_GCP_PROJECT_ID"
+    "default": "premium-oven-394418"
   },
   "targets": {
-    "YOUR_GCP_PROJECT_ID": {
+    "premium-oven-394418": {
       "hosting": {
         "triage": ["triage-ime"]
       }
     }
   }
 }
-EOF
 ```
 
-### D. Update `firebase.json` to Use Target
+Verify `frontend/firebase.json` has this configuration:
 
-```bash
-# Update firebase.json to use the target
-cat > firebase.json << 'EOF'
+```json
 {
   "hosting": {
     "target": "triage",
@@ -360,7 +357,46 @@ cat > firebase.json << 'EOF'
     ]
   }
 }
+```
+
+**Option 2: Command Line (Linux/Mac/Cloud Shell)**
+
+```bash
+cd frontend
+
+# Create .firebaserc
+cat > .firebaserc << 'EOF'
+{
+  "projects": {
+    "default": "premium-oven-394418"
+  },
+  "targets": {
+    "premium-oven-394418": {
+      "hosting": {
+        "triage": ["triage-ime"]
+      }
+    }
+  }
+}
 EOF
+```
+
+### D. Verify Hosting Sites
+
+Before deploying, verify your Firebase hosting sites:
+
+```bash
+firebase hosting:sites:list
+```
+
+You should see:
+- Site ID: `triage-ime`
+- Default URL: `https://triage-ime.web.app`
+
+If `triage-ime` doesn't exist, create it:
+
+```bash
+firebase hosting:sites:create triage-ime --project=premium-oven-394418
 ```
 
 ---
@@ -408,20 +444,25 @@ This will open a browser for you to authenticate with Google.
 
 ### F. Deploy to Firebase Hosting
 
+**IMPORTANT:** Use the target name `triage` (not `triage-ime`):
+
 ```bash
-firebase deploy --only hosting
+# Deploy using the target name from firebase.json
+firebase deploy --only hosting:triage
 ```
+
+**If you get an error about targets**, verify your `.firebaserc` has the correct project ID (`premium-oven-394418`).
 
 You'll see output like:
 
 ```
 ✔  Deploy complete!
 
-Project Console: https://console.firebase.google.com/project/YOUR_PROJECT/overview
-Hosting URL: https://your-project.web.app
+Project Console: https://console.firebase.google.com/project/premium-oven-394418/overview
+Hosting URL: https://triage-ime.web.app
 ```
 
-**Save the Hosting URL** (e.g., `https://your-project.web.app`)
+**Your app is now live at:** `https://triage-ime.web.app`
 
 ---
 
@@ -545,10 +586,16 @@ gcloud run deploy triage-worker \
 # 1. Navigate to frontend directory
 cd frontend
 
-# 2. Rebuild and deploy
+# 2. Rebuild production bundle
 npm run build
-firebase deploy --only hosting
+
+# 3. Deploy to Firebase (use target name, not site ID)
+firebase deploy --only hosting:triage
 ```
+
+**Common Issues:**
+- If you get "Deploy target triage not configured", verify `.firebaserc` has `"default": "premium-oven-394418"`
+- If you get "Hosting site or target triage-ime not detected", use `hosting:triage` (not `hosting:triage-ime`)
 
 ---
 

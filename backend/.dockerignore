@@ -16,6 +16,10 @@ ENV/
 .env.*
 !.env.example
 
+# Service account keys (stored in GCS, not in image)
+*.json
+!package*.json
+
 # Database
 *.db
 *.db-journal

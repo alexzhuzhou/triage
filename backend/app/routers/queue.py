@@ -1,6 +1,7 @@
 """
 Queue monitoring and management endpoints.
 """
+import logging
 from typing import Dict, Any
 from fastapi import APIRouter, HTTPException
 from rq import Queue, Worker
@@ -14,6 +15,8 @@ from rq.registry import (
 )
 
 from app.services.queue import get_redis_connection, get_queue
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/queue", tags=["queue"])
 
@@ -35,38 +38,53 @@ def get_queue_status() -> Dict[str, Any]:
         redis_conn = get_redis_connection()
         queue = get_queue("default")
 
-        # Get all registries
-        started_registry = StartedJobRegistry(queue=queue)
-        finished_registry = FinishedJobRegistry(queue=queue)
-        failed_registry = FailedJobRegistry(queue=queue)
-        scheduled_registry = ScheduledJobRegistry(queue=queue)
-        deferred_registry = DeferredJobRegistry(queue=queue)
+        # Get all registries with individual error handling for resilience
+        def safe_registry_len(registry_class, registry_name):
+            try:
+                registry = registry_class(queue=queue)
+                return len(registry)
+            except Exception as e:
+                logger.warning(f"Failed to get {registry_name} count: {e}")
+                return 0
 
-        # Get workers from Redis connection
-        workers = Worker.all(connection=redis_conn)
+        queued_count = len(queue) if queue else 0
+        started_count = safe_registry_len(StartedJobRegistry, "started")
+        finished_count = safe_registry_len(FinishedJobRegistry, "finished")
+        failed_count = safe_registry_len(FailedJobRegistry, "failed")
+        scheduled_count = safe_registry_len(ScheduledJobRegistry, "scheduled")
+        deferred_count = safe_registry_len(DeferredJobRegistry, "deferred")
+
+        # Get workers with error handling
+        worker_count = 0
+        try:
+            workers = Worker.all(connection=redis_conn)
+            worker_count = len(workers)
+        except Exception as e:
+            logger.warning(f"Failed to get worker count: {e}")
 
         return {
             "queue": "default",
             "counts": {
-                "queued": len(queue),
-                "started": len(started_registry),
-                "finished": len(finished_registry),
-                "failed": len(failed_registry),
-                "scheduled": len(scheduled_registry),
-                "deferred": len(deferred_registry)
+                "queued": queued_count,
+                "started": started_count,
+                "finished": finished_count,
+                "failed": failed_count,
+                "scheduled": scheduled_count,
+                "deferred": deferred_count
             },
-            "is_empty": queue.is_empty(),
-            "worker_count": len(workers),
+            "is_empty": queue.is_empty() if queue else True,
+            "worker_count": worker_count,
             "total_jobs": (
-                len(queue) +
-                len(started_registry) +
-                len(finished_registry) +
-                len(failed_registry) +
-                len(scheduled_registry) +
-                len(deferred_registry)
+                queued_count +
+                started_count +
+                finished_count +
+                failed_count +
+                scheduled_count +
+                deferred_count
             )
         }
     except Exception as e:
+        logger.error(f"Failed to get queue status: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to get queue status: {str(e)}")
 
 

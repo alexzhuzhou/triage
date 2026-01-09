@@ -22,6 +22,11 @@ ENV/
 backend/.env.local
 backend/.env.test-secrets
 frontend/.env.production
+backend/env-vars.yaml
+
+# Service account keys (CRITICAL - NEVER commit!)
+backend/*.json
+!backend/package*.json
 
 # Database
 *.db

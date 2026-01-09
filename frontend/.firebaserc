@@ -1,9 +1,9 @@
 {
   "projects": {
-    "default": "YOUR_GCP_PROJECT_ID"
+    "default": "premium-oven-394418"
   },
   "targets": {
-    "YOUR_GCP_PROJECT_ID": {
+    "premium-oven-394418": {
       "hosting": {
         "triage": [
           "triage-ime"
